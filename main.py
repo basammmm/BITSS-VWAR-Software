@@ -109,6 +109,7 @@ import os
 import sys
 import ctypes
 import tkinter as tk
+from tkinterdnd2 import TkinterDnD
 from activation.license_utils import is_activated
 from activation.gui import show_activation_window
 from app_main import VWARScannerGUI
@@ -187,7 +188,7 @@ def main():
         return
     # check_exe_name()
     if already_running():
-        root = tk.Tk()
+        root = TkinterDnD.Tk()
         root.withdraw()
         messagebox.showinfo("VWAR Scanner", "VWAR is already running.")
         sys.exit()
@@ -222,7 +223,7 @@ def main():
             return
     elif args.tray:
         print("[INFO] Tray mode startup")
-        root = tk.Tk()
+        root = TkinterDnD.Tk()
         root.withdraw()  # Hide initially
         app = VWARScannerGUI(root)
         # Hide window at start
@@ -253,7 +254,7 @@ def main():
         root.mainloop()
     else:
         print("[INFO] Launching VWAR Scanner GUI...")
-        root = tk.Tk()
+        root = TkinterDnD.Tk()
         app = VWARScannerGUI(root)
         root.mainloop()
 

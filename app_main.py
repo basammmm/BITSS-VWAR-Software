@@ -1,7 +1,8 @@
 import os
 import json
 
-from tkinter import Tk, Frame, Label, Button,LabelFrame
+from tkinter import Tk, Frame, Label, Button, LabelFrame
+from tkinterdnd2 import TkinterDnD
 from config import ICON_PATH, ACTIVATION_FILE, QUARANTINE_FOLDER
 from Scanning.scan_page import ScanPage
 from Backup.main_backup_page import BackupMainPage

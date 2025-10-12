@@ -236,8 +236,9 @@
 
 
 import os, threading, base64, time, shutil, traceback
-from tkinter import Frame, Button, Label, Text, Canvas, filedialog
+from tkinter import Frame, Button, Label, Text, Canvas, filedialog, TclError
 from tkinter.ttk import Progressbar
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from Scanning.yara_engine import fetch_and_generate_yara_rules, compile_yara_rules
 from Scanning.quarantine import quarantine_file
@@ -353,6 +354,19 @@ class ScanPage(Frame):
         self.LOAD_TEXT = Text(log_frame, height=6, bg="#D9D9D9", fg="black", wrap="word", highlightthickness=0)
         self.LOAD_TEXT.pack(fill="x", expand=True)
 
+        # === Drag & Drop Zone ===
+        drop_zone_frame = Frame(self, bg="#009AA5")
+        drop_zone_frame.pack(fill="x", padx=10, pady=10)
+
+        self.drop_label = Label(drop_zone_frame, text="📁 Drag & Drop Files or Folders Here\n(or use buttons below)",
+                                bg="#1ABC9C", fg="white", font=("Arial", 14, "bold"),
+                                relief="ridge", bd=2, height=3)
+        self.drop_label.pack(fill="x", expand=True)
+        
+        # Register drag-and-drop events
+        self.drop_label.drop_target_register(DND_FILES)
+        self.drop_label.dnd_bind('<<Drop>>', self.on_drop)
+
         # === File/Folder Controls ===
         control_frame = Frame(self, bg="#009AA5")
         control_frame.pack(fill="x", padx=10, pady=10)
@@ -402,6 +416,70 @@ class ScanPage(Frame):
         tip_label = Label(parent, text="?", bg="#009AA5", fg="white", font=("Arial", 12, "bold"))
         tip_label.pack(side="left", padx=(0, 10))
         Tooltip(tip_label, tooltip)
+
+    def on_drop(self, event):
+        """Handle drag-and-drop events"""
+        try:
+            # Parse the dropped data (can be multiple files/folders)
+            dropped_data = self._parse_drop_data(event.data)
+            
+            if len(dropped_data) == 0:
+                self.log("[WARNING] No valid files or folders dropped.", "load")
+                return
+            
+            # If single item, set as target and auto-start scan
+            if len(dropped_data) == 1:
+                path = dropped_data[0]
+                self.target_path = path
+                self.LOAD_TEXT.delete("1.0", "end")
+                
+                if os.path.isfile(path):
+                    self.log(f"[INFO] Dropped file: {path}", "load")
+                elif os.path.isdir(path):
+                    self.log(f"[INFO] Dropped folder: {path}", "load")
+                
+                # Change drop zone color to indicate ready
+                self.drop_label.config(bg="#27AE60", text=f"✓ Ready to scan:\n{os.path.basename(path)}")
+                
+                # Auto-start scan
+                self.log("[INFO] Starting scan...", "load")
+                self.start_scan_thread()
+                
+            # If multiple items, scan each one (folder scanning)
+            else:
+                self.log(f"[INFO] Dropped {len(dropped_data)} items. Scanning each...", "load")
+                for path in dropped_data:
+                    if os.path.exists(path):
+                        self.target_path = path
+                        self.start_scan_thread()
+                        time.sleep(0.5)  # Brief delay between scans
+                        
+        except Exception as e:
+            self.log(f"[ERROR] Drop failed: {e}", "load")
+            traceback.print_exc()
+
+    def _parse_drop_data(self, data):
+        """Parse tkinterdnd2 drop data into list of paths"""
+        paths = []
+        
+        # Handle Windows file paths with curly braces
+        if data.startswith('{'):
+            # Split by } { pattern for multiple files
+            items = data.strip('{}').split('} {')
+            paths = [item.strip() for item in items]
+        else:
+            # Single file or space-separated paths
+            paths = [data.strip()]
+        
+        # Clean and validate paths
+        cleaned_paths = []
+        for path in paths:
+            # Remove quotes if present
+            path = path.strip('"').strip("'")
+            if os.path.exists(path):
+                cleaned_paths.append(path)
+        
+        return cleaned_paths
 
 
 
