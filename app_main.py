@@ -16,6 +16,7 @@ from utils.help_page import HelpPage
 from utils.exclusions_page import ExclusionsPage
 from utils.settings import SETTINGS, set_debug, is_debug
 from utils.startup import enable_startup, disable_startup, is_startup_enabled
+from utils.tray import create_tray
 from Scanning.scheduled_scan import ScheduledScanRunner, load_scan_schedule, save_scan_schedule, ScanScheduleConfig
 
 from datetime import datetime, timedelta
@@ -35,6 +36,10 @@ class VWARScannerGUI:
 
         # Start background services (auto backup scheduler)
         AutoBackupScheduler().start()
+        
+        # System tray icon
+        self.tray_icon = None
+        self.minimize_to_tray = SETTINGS.get("minimize_to_tray", True)  # Default enabled
 
         # Shared state / attributes
         self.pages = {}
@@ -276,7 +281,51 @@ class VWARScannerGUI:
             self.valid_till = "unknown"
 
     def on_close(self):
+        """Minimize to tray or exit based on settings."""
+        if self.minimize_to_tray:
+            # Minimize to tray instead of closing
+            self.root.withdraw()  # Hide window
+            
+            # Create tray icon if not already created
+            if not self.tray_icon:
+                self.tray_icon = create_tray(
+                    on_restore=self.restore_from_tray,
+                    on_exit=self.exit_app,
+                    icon_path=ICON_PATH,
+                    tooltip="VWAR Scanner - Running in background",
+                    on_scan_now=self.tray_scan_now
+                )
+        else:
+            # Normal exit
+            self.exit_app()
+    
+    def restore_from_tray(self):
+        """Restore window from system tray."""
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+        except Exception as e:
+            print(f"[ERROR] Failed to restore window: {e}")
+    
+    def tray_scan_now(self):
+        """Trigger scan from tray menu."""
+        try:
+            self.restore_from_tray()
+            if "scan" in self.pages:
+                self.show_page("scan")
+        except Exception as e:
+            print(f"[ERROR] Tray scan failed: {e}")
+    
+    def exit_app(self):
         """Stops monitoring/backup if running, exits app cleanly."""
+        # Stop tray icon
+        if self.tray_icon:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+        
         # Stop monitor page's realtime engine if running
         try:
             monitor_page = self.pages.get("monitor")
@@ -293,6 +342,7 @@ class VWARScannerGUI:
         if hasattr(self, "auto_backup"):
             self.auto_backup.stop()
         self.root.destroy()
+        os._exit(0)  # Force exit
 
 
     def get_all_accessible_drives(self):
@@ -357,6 +407,23 @@ class VWARScannerGUI:
             SETTINGS.startup_tray = self._startup_tray_var.get()
         tk.Checkbutton(frame, text="Start minimized to tray when auto-starting", variable=self._startup_tray_var,
                        command=on_startup_tray_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,5))
+
+        # Minimize to tray on close
+        self._minimize_tray_var = tk.BooleanVar(value=self.minimize_to_tray)
+        def on_minimize_tray_toggle():
+            self.minimize_to_tray = self._minimize_tray_var.get()
+            SETTINGS.minimize_to_tray = self.minimize_to_tray
+            # If enabled and no tray icon exists, create it
+            if self.minimize_to_tray and not self.tray_icon:
+                self.tray_icon = create_tray(
+                    on_restore=self.restore_from_tray,
+                    on_exit=self.exit_app,
+                    icon_path=ICON_PATH,
+                    tooltip="VWAR Scanner - Running in background",
+                    on_scan_now=self.tray_scan_now
+                )
+        tk.Checkbutton(frame, text="Minimize to tray on close (X button)", variable=self._minimize_tray_var,
+                       command=on_minimize_tray_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,5))
 
         # Tray notification preference
         self._tray_notify_var = tk.BooleanVar(value=SETTINGS.tray_notifications)

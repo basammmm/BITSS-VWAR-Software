@@ -6,6 +6,7 @@ class AppSettings:
     debug: bool = False
     startup_tray: bool = True  # append --tray when enabling Windows startup
     tray_notifications: bool = True  # show notifications for matches when in tray/silent
+    minimize_to_tray: bool = True  # minimize to tray on close (X button) instead of exit
 
 SETTINGS = AppSettings()
 
