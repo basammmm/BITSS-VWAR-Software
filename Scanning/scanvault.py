@@ -1,45 +1,3 @@
-def copy_to_vault_for_scan(file_path: str, event: str | None = None) -> Tuple[str, str]:
-    """
-    Copy a file into the ScanVault folder for scanning (installer-aware mode).
-    Does NOT quarantine or move the original file.
-    Returns (vaulted_path, meta_path).
-    """
-    if not os.path.exists(file_path):
-        raise RuntimeError(f"File no longer exists: {file_path}")
-
-    os.makedirs(SCANVAULT_FOLDER, exist_ok=True)
-
-    file_name = os.path.basename(file_path)
-    timestamp_raw = datetime.now()
-    timestamp_file = timestamp_raw.strftime("%Y%m%d%H%M%S")
-    timestamp_human = timestamp_raw.strftime("%Y-%m-%d %H:%M:%S")
-    normalized_path_for_hash = os.path.abspath(file_path).replace("\\", "/")
-    path_hash = hashlib.sha256(normalized_path_for_hash.encode()).hexdigest()[:16]
-    sig = _make_signature(file_path)
-
-    vaulted_filename = f"{file_name}__{timestamp_file}__{path_hash}.vaulted"
-    vaulted_path = os.path.join(SCANVAULT_FOLDER, vaulted_filename)
-
-    # Copy file (do not move)
-    shutil.copy2(file_path, vaulted_path)
-
-    meta_path = vaulted_path + ".meta"
-    metadata = {
-        "original_path": normalized_path_for_hash,
-        "vaulted_path": vaulted_path,
-        "timestamp": timestamp_human,
-        "event": (event or "installer_copy_scan"),
-        "signature": sig,
-        "installer_mode": True,
-    }
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=4)
-    log_message(f"[SCANVAULT] [installer-copy] {file_path} → {vaulted_path}")
-    try:
-        telemetry_inc("installer_copy_scan")
-    except Exception:
-        pass
-    return vaulted_path, meta_path
 import os
 import shutil
 import json
@@ -87,6 +45,49 @@ def _make_signature(path: str) -> str:
     head_hash = _first64k_hash(path)
     raw = f"{size}|{mtime_ns}|{head_hash}|{path_hash}".encode()
     return hashlib.sha256(raw).hexdigest()[:32]
+
+def copy_to_vault_for_scan(file_path: str, event: str | None = None) -> Tuple[str, str]:
+    """
+    Copy a file into the ScanVault folder for scanning (installer-aware mode).
+    Does NOT quarantine or move the original file.
+    Returns (vaulted_path, meta_path).
+    """
+    if not os.path.exists(file_path):
+        raise RuntimeError(f"File no longer exists: {file_path}")
+
+    os.makedirs(SCANVAULT_FOLDER, exist_ok=True)
+
+    file_name = os.path.basename(file_path)
+    timestamp_raw = datetime.now()
+    timestamp_file = timestamp_raw.strftime("%Y%m%d%H%M%S")
+    timestamp_human = timestamp_raw.strftime("%Y-%m-%d %H:%M:%S")
+    normalized_path_for_hash = os.path.abspath(file_path).replace("\\", "/")
+    path_hash = hashlib.sha256(normalized_path_for_hash.encode()).hexdigest()[:16]
+    sig = _make_signature(file_path)
+
+    vaulted_filename = f"{file_name}__{timestamp_file}__{path_hash}.vaulted"
+    vaulted_path = os.path.join(SCANVAULT_FOLDER, vaulted_filename)
+
+    # Copy file (do not move)
+    shutil.copy2(file_path, vaulted_path)
+
+    meta_path = vaulted_path + ".meta"
+    metadata = {
+        "original_path": normalized_path_for_hash,
+        "vaulted_path": vaulted_path,
+        "timestamp": timestamp_human,
+        "event": (event or "installer_copy_scan"),
+        "signature": sig,
+        "installer_mode": True,
+    }
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=4)
+    log_message(f"[SCANVAULT] [installer-copy] {file_path} → {vaulted_path}")
+    try:
+        telemetry_inc("installer_copy_scan")
+    except Exception:
+        pass
+    return vaulted_path, meta_path
 
 def vault_capture_file(file_path: str, event: str | None = None) -> Tuple[str, str]:
     """
