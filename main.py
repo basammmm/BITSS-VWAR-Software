@@ -181,10 +181,11 @@ def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--silent", action="store_true", help="Run services only (no GUI)")
     parser.add_argument("--tray", action="store_true", help="Start minimized to system tray")
+    parser.add_argument("--no-admin", action="store_true", help="Skip admin privilege check (for testing)")
     parser.add_argument("--help", action="store_true", help="Show help and exit")
     args, unknown = parser.parse_known_args()
     if args.help:
-        print("VWAR Scanner options:\n  --silent   Run background services only (monitor, scheduler)\n  --tray     Start to system tray; GUI shown when icon clicked\n  --help     Show this help")
+        print("VWAR Scanner options:\n  --silent   Run background services only (monitor, scheduler)\n  --tray     Start to system tray; GUI shown when icon clicked\n  --no-admin Skip admin check (testing only)\n  --help     Show this help")
         return
     # check_exe_name()
     if already_running():
@@ -193,9 +194,10 @@ def main():
         messagebox.showinfo("VWAR Scanner", "VWAR is already running.")
         sys.exit()
 
-    # Step 1: Elevate to admin
-    if not is_admin():
+    # Step 1: Elevate to admin (skip if --no-admin)
+    if not args.no_admin and not is_admin():
         print("[INFO] Not running as admin. Relaunching...")
+        print("[TIP] Use --no-admin flag to skip this check for testing")
         run_as_admin()
         return
 

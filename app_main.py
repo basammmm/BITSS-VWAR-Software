@@ -39,7 +39,7 @@ class VWARScannerGUI:
         
         # System tray icon
         self.tray_icon = None
-        self.minimize_to_tray = SETTINGS.get("minimize_to_tray", True)  # Default enabled
+        self.minimize_to_tray = getattr(SETTINGS, "minimize_to_tray", True)  # Default enabled
 
         # Shared state / attributes
         self.pages = {}

@@ -68,9 +68,16 @@ class ScanPage(Frame):
                                 relief="ridge", bd=2, height=3)
         self.drop_label.pack(fill="x", expand=True)
         
-        # Register drag-and-drop events
-        self.drop_label.drop_target_register(DND_FILES)
-        self.drop_label.dnd_bind('<<Drop>>', self.on_drop)
+        # Register drag-and-drop events - use try/except for compatibility
+        try:
+            self.drop_label.drop_target_register(DND_FILES)
+            self.drop_label.dnd_bind('<<Drop>>', self.on_drop)
+            self.drop_label.dnd_bind('<<DragEnter>>', self.on_drag_enter)
+            self.drop_label.dnd_bind('<<DragLeave>>', self.on_drag_leave)
+        except Exception as e:
+            # Fallback if tkinterdnd2 doesn't work properly
+            self.log(f"[WARNING] Drag-and-drop initialization failed: {e}", "load")
+            self.log("[INFO] Please use 'Select Target File/Folder' buttons instead", "load")
 
         # === File/Folder Controls ===
         control_frame = Frame(self, bg="#009AA5")
@@ -162,6 +169,20 @@ class ScanPage(Frame):
         except Exception as e:
             self.log(f"[ERROR] Drop failed: {e}", "load")
             traceback.print_exc()
+    
+    def on_drag_enter(self, event):
+        """Visual feedback when dragging over drop zone"""
+        try:
+            self.drop_label.config(bg="#16A085")  # Darker green on hover
+        except Exception:
+            pass
+    
+    def on_drag_leave(self, event):
+        """Reset visual feedback when leaving drop zone"""
+        try:
+            self.drop_label.config(bg="#1ABC9C")  # Original green
+        except Exception:
+            pass
 
     def _parse_drop_data(self, data):
         """Parse tkinterdnd2 drop data into list of paths"""

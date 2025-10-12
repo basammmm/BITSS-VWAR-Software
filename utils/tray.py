@@ -18,6 +18,16 @@ try:
     import win32con  # type: ignore
     import win32gui  # type: ignore
     import win32gui_struct  # type: ignore
+    
+    # Define missing constants if not present (pywin32 version issue)
+    if not hasattr(win32con, 'NIF_ICON'):
+        win32con.NIF_ICON = 0x00000002
+    if not hasattr(win32con, 'NIF_MESSAGE'):
+        win32con.NIF_MESSAGE = 0x00000001
+    if not hasattr(win32con, 'NIF_TIP'):
+        win32con.NIF_TIP = 0x00000004
+    if not hasattr(win32con, 'NIF_INFO'):
+        win32con.NIF_INFO = 0x00000010
 except Exception:  # pragma: no cover
     win32api = win32con = win32gui = win32gui_struct = None  # type: ignore
 
