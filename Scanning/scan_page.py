@@ -15,7 +15,61 @@ from datetime import datetime
 import shutil
 import json
 
-from Scanning.scanner_core import scan_file_for_realtime 
+from Scanning.scanner_core import scan_file_for_realtime
+
+# Windows API for enabling drag-drop with admin privileges
+import sys
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        # Constants for ChangeWindowMessageFilterEx
+        MSGFLT_ADD = 1
+        MSGFLT_ALLOW = 1
+        WM_DROPFILES = 0x0233
+        WM_COPYDATA = 0x004A
+        WM_COPYGLOBALDATA = 0x0049
+        
+        def enable_drag_drop_for_elevated_window(hwnd):
+            """Enable drag-drop from non-elevated processes to elevated window"""
+            try:
+                # Try using ChangeWindowMessageFilterEx (Windows 7+)
+                try:
+                    user32 = ctypes.windll.user32
+                    user32.ChangeWindowMessageFilterEx.argtypes = [
+                        wintypes.HWND, wintypes.UINT, wintypes.DWORD, ctypes.c_void_p
+                    ]
+                    user32.ChangeWindowMessageFilterEx.restype = wintypes.BOOL
+                    
+                    # Allow these messages from lower privilege processes
+                    user32.ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, None)
+                    user32.ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, None)
+                    user32.ChangeWindowMessageFilterEx(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, None)
+                    user32.ChangeWindowMessageFilterEx(hwnd, 0x0049, MSGFLT_ALLOW, None)
+                    print("[INFO] ✓ Drag-drop enabled for elevated window using ChangeWindowMessageFilterEx")
+                    return True
+                except Exception as e1:
+                    # Fallback to ChangeWindowMessageFilter (Vista)
+                    try:
+                        user32 = ctypes.windll.user32
+                        user32.ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD)
+                        user32.ChangeWindowMessageFilter(WM_COPYDATA, MSGFLT_ADD)
+                        user32.ChangeWindowMessageFilter(WM_COPYGLOBALDATA, MSGFLT_ADD)
+                        print("[INFO] ✓ Drag-drop enabled using ChangeWindowMessageFilter (fallback)")
+                        return True
+                    except Exception as e2:
+                        print(f"[WARNING] Could not enable drag-drop for elevated window: {e2}")
+                        return False
+            except Exception as e:
+                print(f"[WARNING] Failed to enable elevated drag-drop: {e}")
+                return False
+    except ImportError:
+        def enable_drag_drop_for_elevated_window(hwnd):
+            return False
+else:
+    def enable_drag_drop_for_elevated_window(hwnd):
+        return False
 
 
 class ScanPage(Frame):
@@ -74,10 +128,25 @@ class ScanPage(Frame):
             self.drop_label.dnd_bind('<<Drop>>', self.on_drop)
             self.drop_label.dnd_bind('<<DragEnter>>', self.on_drag_enter)
             self.drop_label.dnd_bind('<<DragLeave>>', self.on_drag_leave)
+            self.log("[INFO] ✓ Drag & Drop enabled successfully!", "load")
+            
+            # Enable cross-privilege drag-drop on Windows (for admin apps)
+            if sys.platform == 'win32':
+                try:
+                    # Must wait for widget to be fully created
+                    self.drop_label.update_idletasks()
+                    # Get the window handle for this widget
+                    window_id = self.drop_label.winfo_id()
+                    if enable_drag_drop_for_elevated_window(window_id):
+                        self.log("[INFO] ✓ Cross-privilege drag-drop enabled (works with admin)", "load")
+                except Exception as e:
+                    self.log(f"[DEBUG] Cross-privilege setup: {e}", "load")
+                    
         except Exception as e:
             # Fallback if tkinterdnd2 doesn't work properly
             self.log(f"[WARNING] Drag-and-drop initialization failed: {e}", "load")
             self.log("[INFO] Please use 'Select Target File/Folder' buttons instead", "load")
+            self.drop_label.config(text="⚠ Drag & Drop Not Available\n(Use buttons below)", bg="#E67E22")
 
         # === File/Folder Controls ===
         control_frame = Frame(self, bg="#009AA5")
@@ -132,39 +201,47 @@ class ScanPage(Frame):
     def on_drop(self, event):
         """Handle drag-and-drop events"""
         try:
+            self.log(f"[DEBUG] Drop event triggered! Data: {event.data[:100]}", "load")
+            
             # Parse the dropped data (can be multiple files/folders)
             dropped_data = self._parse_drop_data(event.data)
             
             if len(dropped_data) == 0:
                 self.log("[WARNING] No valid files or folders dropped.", "load")
+                self.log(f"[DEBUG] Raw data was: {event.data}", "load")
                 return
             
-            # If single item, set as target and auto-start scan
+            # If single item, set as target and save it
             if len(dropped_data) == 1:
                 path = dropped_data[0]
                 self.target_path = path
                 self.LOAD_TEXT.delete("1.0", "end")
                 
+                # Save the dropped path for later use
                 if os.path.isfile(path):
-                    self.log(f"[INFO] Dropped file: {path}", "load")
+                    self.log(f"[INFO] File dropped and saved: {path}", "load")
                 elif os.path.isdir(path):
-                    self.log(f"[INFO] Dropped folder: {path}", "load")
+                    self.log(f"[INFO] Folder dropped and saved: {path}", "load")
+                else:
+                    self.log(f"[WARNING] Unknown type: {path}", "load")
                 
                 # Change drop zone color to indicate ready
-                self.drop_label.config(bg="#27AE60", text=f"✓ Ready to scan:\n{os.path.basename(path)}")
+                basename = os.path.basename(path) if path else "Unknown"
+                self.drop_label.config(bg="#27AE60", text=f"✓ Path saved:\n{basename}\n(Click 'Scan' to start)")
                 
-                # Auto-start scan
-                self.log("[INFO] Starting scan...", "load")
-                self.start_scan_thread()
+                # DON'T auto-start - let user click Scan button
+                self.log("[INFO] Path saved. Click 'Scan' button to start scanning.", "load")
                 
-            # If multiple items, scan each one (folder scanning)
+            # If multiple items, save first one and log others
             else:
-                self.log(f"[INFO] Dropped {len(dropped_data)} items. Scanning each...", "load")
-                for path in dropped_data:
-                    if os.path.exists(path):
-                        self.target_path = path
-                        self.start_scan_thread()
-                        time.sleep(0.5)  # Brief delay between scans
+                self.log(f"[INFO] Multiple items dropped ({len(dropped_data)} items)", "load")
+                # Save first valid path
+                if dropped_data:
+                    self.target_path = dropped_data[0]
+                    self.log(f"[INFO] Primary path saved: {self.target_path}", "load")
+                    for idx, path in enumerate(dropped_data[1:], 1):
+                        self.log(f"  [{idx}] {path}", "load")
+                    self.log("[INFO] Click 'Scan' to scan the primary path.", "load")
                         
         except Exception as e:
             self.log(f"[ERROR] Drop failed: {e}", "load")

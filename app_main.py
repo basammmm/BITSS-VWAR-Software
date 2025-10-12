@@ -368,8 +368,34 @@ class VWARScannerGUI:
     # ---------------- Settings Page -----------------
     def _build_settings_page(self, parent):
         import tkinter as tk
-        frame = tk.Frame(parent, bg="#009AA5")
-        header = tk.Label(frame, text="Schedule Scan", font=("Arial", 24, "bold"), bg="#009AA5", fg="white")
+        
+        # Create container with scrollbar
+        container = tk.Frame(parent, bg="#009AA5")
+        
+        canvas = tk.Canvas(container, bg="#009AA5", highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#009AA5")
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack scrollbar and canvas
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        # Enable mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Now use scrollable_frame instead of frame
+        frame = scrollable_frame
+        header = tk.Label(frame, text="Settings & Schedule", font=("Arial", 24, "bold"), bg="#009AA5", fg="white")
         header.pack(pady=10)
         ui_font = ("Arial", 12)
 
@@ -489,8 +515,9 @@ class VWARScannerGUI:
         # Paths section with directory picker
         path_row = tk.Frame(frame, bg="#009AA5")
         path_row.pack(fill="x", padx=30, pady=2)
-        tk.Label(path_row, text="Paths (separate with ;):", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
-        tk.Entry(path_row, textvariable=self._sched_paths_var, width=50, font=ui_font).pack(side="left", padx=5)
+        tk.Label(path_row, text="Paths (separate with ;):", bg="#009AA5", fg="white", font=ui_font).pack(side="left", anchor="w")
+        path_entry = tk.Entry(path_row, textvariable=self._sched_paths_var, font=ui_font)
+        path_entry.pack(side="left", padx=5, fill="x", expand=True)
         def add_dir():
             from tkinter import filedialog
             d = filedialog.askdirectory()
@@ -555,13 +582,154 @@ class VWARScannerGUI:
             self.scheduled_scan_runner.run_now()
         tk.Button(btn_row, text="Run Now", command=run_now, bg="#555577", fg="white", font=ui_font).pack(side="left", padx=10)
         
-        # Exclusions management button
-        tk.Label(frame, text="", bg="#009AA5").pack(pady=10)  # Spacer
+        # === Inline Exclusions Section ===
+        tk.Label(frame, text="", bg="#009AA5").pack(pady=15)  # Spacer
+        
         excl_header = tk.Label(frame, text="Scan Exclusions", font=("Arial", 18, "bold"), bg="#009AA5", fg="white")
         excl_header.pack(anchor="w", padx=20, pady=(10,5))
-        tk.Label(frame, text="Manage folders and files to exclude from scanning.", bg="#009AA5", fg="white", font=ui_font).pack(anchor="w", padx=30, pady=(0,10))
-        tk.Button(frame, text="⚙️ Manage Exclusions", command=lambda: self.show_page("exclusions"), 
-                 bg="#005555", fg="white", font=("Arial", 12, "bold"), cursor="hand2").pack(anchor="w", padx=30)
+        
+        excl_desc = tk.Label(frame, text="Add paths or file extensions to exclude from all scans.", 
+                            bg="#009AA5", fg="white", font=ui_font, wraplength=800, justify="left")
+        excl_desc.pack(anchor="w", padx=30, pady=(0,10))
+        
+        # Import exclusions backend
+        from utils.user_exclusions import UserExclusions
+        self.user_exclusions = UserExclusions()
+        
+        # Create two-column layout for paths and extensions
+        exclusions_container = tk.Frame(frame, bg="#009AA5")
+        exclusions_container.pack(fill="both", expand=True, padx=30, pady=5)
+        
+        # Left: Excluded Paths
+        left_col = tk.Frame(exclusions_container, bg="#009AA5")
+        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        tk.Label(left_col, text="Excluded Paths:", bg="#009AA5", fg="white", font=("Arial", 12, "bold")).pack(anchor="w")
+        
+        paths_frame = tk.Frame(left_col, bg="#009AA5")
+        paths_frame.pack(fill="both", expand=True)
+        
+        paths_scrollbar = tk.Scrollbar(paths_frame)
+        paths_scrollbar.pack(side="right", fill="y")
+        
+        self.excl_paths_listbox = tk.Listbox(paths_frame, yscrollcommand=paths_scrollbar.set, height=6, bg="white", fg="black")
+        self.excl_paths_listbox.pack(side="left", fill="both", expand=True)
+        paths_scrollbar.config(command=self.excl_paths_listbox.yview)
+        
+        # Populate paths
+        for path in self.user_exclusions.get_excluded_paths():
+            self.excl_paths_listbox.insert("end", path)
+        
+        paths_btn_frame = tk.Frame(left_col, bg="#009AA5")
+        paths_btn_frame.pack(fill="x", pady=5)
+        
+        def add_path():
+            from tkinter import filedialog
+            path = filedialog.askdirectory(title="Select Folder to Exclude")
+            if path:
+                self.user_exclusions.add_path(path)
+                self.excl_paths_listbox.insert("end", path)
+        
+        def add_file():
+            from tkinter import filedialog
+            path = filedialog.askopenfilename(title="Select File to Exclude")
+            if path:
+                self.user_exclusions.add_path(path)
+                self.excl_paths_listbox.insert("end", path)
+        
+        def remove_path():
+            selection = self.excl_paths_listbox.curselection()
+            if selection:
+                idx = selection[0]
+                path = self.excl_paths_listbox.get(idx)
+                self.user_exclusions.remove_path(path)
+                self.excl_paths_listbox.delete(idx)
+        
+        tk.Button(paths_btn_frame, text="+ Add Folder", command=add_path, bg="#007777", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        tk.Button(paths_btn_frame, text="+ Add File", command=add_file, bg="#007777", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        tk.Button(paths_btn_frame, text="- Remove", command=remove_path, bg="#AA0000", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        
+        # Right: Excluded Extensions
+        right_col = tk.Frame(exclusions_container, bg="#009AA5")
+        right_col.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        
+        tk.Label(right_col, text="Excluded Extensions:", bg="#009AA5", fg="white", font=("Arial", 12, "bold")).pack(anchor="w")
+        
+        ext_frame = tk.Frame(right_col, bg="#009AA5")
+        ext_frame.pack(fill="both", expand=True)
+        
+        ext_scrollbar = tk.Scrollbar(ext_frame)
+        ext_scrollbar.pack(side="right", fill="y")
+        
+        self.excl_ext_listbox = tk.Listbox(ext_frame, yscrollcommand=ext_scrollbar.set, height=6, bg="white", fg="black")
+        self.excl_ext_listbox.pack(side="left", fill="both", expand=True)
+        ext_scrollbar.config(command=self.excl_ext_listbox.yview)
+        
+        # Populate extensions
+        for ext in self.user_exclusions.get_excluded_extensions():
+            self.excl_ext_listbox.insert("end", ext)
+        
+        ext_btn_frame = tk.Frame(right_col, bg="#009AA5")
+        ext_btn_frame.pack(fill="x", pady=5)
+        
+        def add_extension():
+            # Create simple dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Add Extension")
+            dialog.geometry("300x120")
+            dialog.configure(bg="#009AA5")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            tk.Label(dialog, text="Enter extension (e.g., .mp4):", bg="#009AA5", fg="white", font=ui_font).pack(pady=10)
+            entry = tk.Entry(dialog, font=ui_font)
+            entry.pack(padx=20, fill="x")
+            entry.focus()
+            
+            def save_ext():
+                ext = entry.get().strip()
+                if ext:
+                    if not ext.startswith('.'):
+                        ext = '.' + ext
+                    self.user_exclusions.add_extension(ext)
+                    self.excl_ext_listbox.insert("end", ext)
+                dialog.destroy()
+            
+            tk.Button(dialog, text="Add", command=save_ext, bg="#007777", fg="white", font=ui_font).pack(pady=10)
+            entry.bind('<Return>', lambda e: save_ext())
+        
+        def remove_extension():
+            selection = self.excl_ext_listbox.curselection()
+            if selection:
+                idx = selection[0]
+                ext = self.excl_ext_listbox.get(idx)
+                self.user_exclusions.remove_extension(ext)
+                self.excl_ext_listbox.delete(idx)
+        
+        tk.Button(ext_btn_frame, text="+ Add Extension", command=add_extension, bg="#007777", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        tk.Button(ext_btn_frame, text="- Remove", command=remove_extension, bg="#AA0000", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        
+        # Quick presets
+        tk.Label(frame, text="", bg="#009AA5").pack(pady=5)  # Spacer
+        preset_frame = tk.Frame(frame, bg="#009AA5")
+        preset_frame.pack(fill="x", padx=30, pady=5)
+        tk.Label(preset_frame, text="Quick Add:", bg="#009AA5", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=(0,10))
+        
+        def add_preset(exts, name):
+            for ext in exts:
+                if ext not in self.user_exclusions.get_excluded_extensions():
+                    self.user_exclusions.add_extension(ext)
+                    self.excl_ext_listbox.insert("end", ext)
+        
+        tk.Button(preset_frame, text="Videos (.mp4, .avi, .mkv)", 
+                 command=lambda: add_preset(['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv'], "Videos"),
+                 bg="#005555", fg="white", font=("Arial", 9)).pack(side="left", padx=2)
+        tk.Button(preset_frame, text="Images (.jpg, .png, .gif)", 
+                 command=lambda: add_preset(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg'], "Images"),
+                 bg="#005555", fg="white", font=("Arial", 9)).pack(side="left", padx=2)
+        tk.Button(preset_frame, text="Archives (.zip, .rar, .7z)", 
+                 command=lambda: add_preset(['.zip', '.rar', '.7z', '.tar', '.gz'], "Archives"),
+                 bg="#005555", fg="white", font=("Arial", 9)).pack(side="left", padx=2)
 
         # --- Dynamic enabling/disabling logic ---
         def refresh_enable_state(*_):
@@ -577,7 +745,7 @@ class VWARScannerGUI:
         self._sched_freq_var.trace_add('write', lambda *a: refresh_enable_state())
         refresh_enable_state()
 
-        return frame
+        return container
 
     # ---------- Scheduled Scan Progress Modal ----------
     def _ensure_sched_modal(self):

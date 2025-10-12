@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from typing import Callable, Optional
 
 try:
@@ -102,7 +103,7 @@ class TrayIcon:
         # Standard message loop
         while self._running:
             win32gui.PumpWaitingMessages()  # type: ignore
-            win32gui.Sleep(100)  # type: ignore
+            time.sleep(0.1)  # Sleep 100ms using standard library
         # Cleanup
         try:
             win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)  # type: ignore

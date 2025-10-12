@@ -163,9 +163,19 @@ def run_vwar_monitor():
         # Dev mode
         base_path = os.path.dirname(os.path.abspath(__file__))
 
-    monitor_path = os.path.join(base_path, "vwar_monitor.exe")
-
-    if os.path.exists(monitor_path):
+    # Try multiple paths for vwar_monitor.exe
+    monitor_candidates = [
+        os.path.join(base_path, "vwar_monitor", "vwar_monitor.exe"),  # Dev: vwar_monitor subfolder
+        os.path.join(base_path, "vwar_monitor.exe"),  # PyInstaller: root level
+    ]
+    
+    monitor_path = None
+    for candidate in monitor_candidates:
+        if os.path.exists(candidate):
+            monitor_path = candidate
+            break
+    
+    if monitor_path:
         try:
             subprocess.Popen(
                 [monitor_path],
@@ -175,7 +185,9 @@ def run_vwar_monitor():
         except Exception as e:
             print("[ERROR] Failed to start VWAR Monitor:", e)
     else:
-        print("[WARNING] VWAR Monitor not found:", monitor_path)
+        print("[WARNING] VWAR Monitor not found in any of these locations:")
+        for candidate in monitor_candidates:
+            print(f"  - {candidate}")
 
 def main():
     parser = argparse.ArgumentParser(add_help=False)
