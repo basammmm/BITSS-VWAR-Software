@@ -368,78 +368,131 @@ class VWARScannerGUI:
     # ---------------- Settings Page -----------------
     def _build_settings_page(self, parent):
         import tkinter as tk
+        from tkinter import ttk
         
-        # Create container with scrollbar
+        # Main container
         container = tk.Frame(parent, bg="#009AA5")
         
-        canvas = tk.Canvas(container, bg="#009AA5", highlightthickness=0)
-        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg="#009AA5")
+        # Header
+        header_frame = tk.Frame(container, bg="#006666", height=60)
+        header_frame.pack(fill="x")
+        header_frame.pack_propagate(False)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        tk.Label(header_frame, text="⚙️ Settings & Configuration", 
+                font=("Arial", 22, "bold"), bg="#006666", fg="white").pack(pady=15)
         
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        # Tabbed interface using ttk.Notebook
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure('Custom.TNotebook', background='#009AA5', borderwidth=0)
+        style.configure('Custom.TNotebook.Tab', 
+                       background='#006666', 
+                       foreground='white',
+                       padding=[20, 10],
+                       font=('Arial', 11, 'bold'))
+        style.map('Custom.TNotebook.Tab',
+                 background=[('selected', '#009AA5')],
+                 foreground=[('selected', 'white')])
+        
+        notebook = ttk.Notebook(container, style='Custom.TNotebook')
+        notebook.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Create tabs
+        general_tab = self._build_general_tab(notebook)
+        schedule_tab = self._build_schedule_tab(notebook)
+        exclusions_tab = self._build_exclusions_tab(notebook)
+        
+        notebook.add(general_tab, text="  🏠 General  ")
+        notebook.add(schedule_tab, text="  📅 Scheduled Scans  ")
+        notebook.add(exclusions_tab, text="  🚫 Exclusions  ")
+        
+        return container
+    
+    # ========== TAB 1: GENERAL SETTINGS ==========
+    def _build_general_tab(self, parent):
+        import tkinter as tk
+        
+        # Scrollable frame
+        canvas = tk.Canvas(parent, bg="#009AA5", highlightthickness=0)
+        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        frame = tk.Frame(canvas, bg="#009AA5")
+        
+        frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # Pack scrollbar and canvas
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
         
-        # Enable mouse wheel scrolling
+        # Mouse wheel
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
-        # Now use scrollable_frame instead of frame
-        frame = scrollable_frame
-        header = tk.Label(frame, text="Settings & Schedule", font=("Arial", 24, "bold"), bg="#009AA5", fg="white")
-        header.pack(pady=10)
-        ui_font = ("Arial", 12)
-
-        # Debug toggle (forced ON)
+        ui_font = ("Arial", 11)
+        section_font = ("Arial", 14, "bold")
+        
+        # === Application Behavior ===
+        self._create_section_header(frame, "🔧 Application Behavior", section_font)
+        
+        settings_frame = tk.Frame(frame, bg="#007777", relief="ridge", bd=2)
+        settings_frame.pack(fill="x", padx=20, pady=5)
+        
+        # Debug toggle
         set_debug(True)
         self._settings_debug_var = tk.BooleanVar(value=True)
         def on_debug_toggle():
             set_debug(self._settings_debug_var.get())
             global DEBUG
             DEBUG = SETTINGS.debug
-            if DEBUG:
-                print("[DEBUG] Debug mode enabled via Schedule Scan UI")
-        debug_chk = tk.Checkbutton(frame, text="Enable Debug Logging", variable=self._settings_debug_var,
-                                   command=on_debug_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font)
-        debug_chk.pack(anchor="w", padx=20, pady=5)
-        debug_chk.config(state="disabled")
-
-        # Startup (Run at Windows login) toggle
+        
+        debug_chk = tk.Checkbutton(settings_frame, text="Enable Debug Logging", 
+                                   variable=self._settings_debug_var,
+                                   command=on_debug_toggle, bg="#007777", fg="white", 
+                                   selectcolor="#004d4d", font=ui_font, state="disabled")
+        debug_chk.pack(anchor="w", padx=15, pady=8)
+        
+        tk.Label(settings_frame, text="Prints detailed diagnostic information to console and log file.",
+                bg="#007777", fg="#CCCCCC", font=("Arial", 9), wraplength=600, justify="left").pack(anchor="w", padx=15, pady=(0,8))
+        
+        # === Startup Options ===
+        self._create_section_header(frame, "🚀 Startup & Tray", section_font)
+        
+        startup_frame = tk.Frame(frame, bg="#007777", relief="ridge", bd=2)
+        startup_frame.pack(fill="x", padx=20, pady=5)
+        
+        # Start with Windows
+        from utils.startup import is_startup_enabled, enable_startup, disable_startup
         self._startup_var = tk.BooleanVar(value=is_startup_enabled())
         def on_startup_toggle():
             if self._startup_var.get():
                 ok = enable_startup()
                 if not ok:
                     self._startup_var.set(False)
-                    self._sched_feedback.config(text="Failed enabling startup (permissions?)", fg="red")
             else:
                 disable_startup()
-        startup_chk = tk.Checkbutton(frame, text="Start with Windows", variable=self._startup_var,
-                                      command=on_startup_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font)
-        startup_chk.pack(anchor="w", padx=20, pady=(0,5))
-
-        # Startup tray preference
+        
+        tk.Checkbutton(startup_frame, text="Start with Windows (Run at login)", 
+                      variable=self._startup_var, command=on_startup_toggle,
+                      bg="#007777", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=15, pady=8)
+        
+        # Startup minimized
         self._startup_tray_var = tk.BooleanVar(value=SETTINGS.startup_tray)
         def on_startup_tray_toggle():
             SETTINGS.startup_tray = self._startup_tray_var.get()
-        tk.Checkbutton(frame, text="Start minimized to tray when auto-starting", variable=self._startup_tray_var,
-                       command=on_startup_tray_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,5))
-
+        
+        tk.Checkbutton(startup_frame, text="   ↳ Start minimized to system tray", 
+                      variable=self._startup_tray_var, command=on_startup_tray_toggle,
+                      bg="#007777", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=15, pady=4)
+        
         # Minimize to tray on close
+        from utils.tray import create_tray
+        # ICON_PATH is already imported at top from config.py
+        
         self._minimize_tray_var = tk.BooleanVar(value=self.minimize_to_tray)
         def on_minimize_tray_toggle():
             self.minimize_to_tray = self._minimize_tray_var.get()
             SETTINGS.minimize_to_tray = self.minimize_to_tray
-            # If enabled and no tray icon exists, create it
             if self.minimize_to_tray and not self.tray_icon:
                 self.tray_icon = create_tray(
                     on_restore=self.restore_from_tray,
@@ -448,24 +501,53 @@ class VWARScannerGUI:
                     tooltip="VWAR Scanner - Running in background",
                     on_scan_now=self.tray_scan_now
                 )
-        tk.Checkbutton(frame, text="Minimize to tray on close (X button)", variable=self._minimize_tray_var,
-                       command=on_minimize_tray_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,5))
-
-        # Tray notification preference
+        
+        tk.Checkbutton(startup_frame, text="Minimize to tray on close (X button)", 
+                      variable=self._minimize_tray_var, command=on_minimize_tray_toggle,
+                      bg="#007777", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=15, pady=4)
+        
+        # Tray notifications
         self._tray_notify_var = tk.BooleanVar(value=SETTINGS.tray_notifications)
         def on_tray_notify_toggle():
             SETTINGS.tray_notifications = self._tray_notify_var.get()
-        tk.Checkbutton(frame, text="Show tray notifications on detections", variable=self._tray_notify_var,
-                       command=on_tray_notify_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,10))
-
-        note = tk.Label(frame, text="Debug mode prints extra diagnostic messages to console/log.",
-                        bg="#009AA5", fg="white", wraplength=600, justify="left", font=ui_font)
-        note.pack(anchor="w", padx=20, pady=(0,15))
-
-        # Scheduled Scan Section
-        sched_header = tk.Label(frame, text="Scheduled Scanning", font=("Arial", 18, "bold"), bg="#009AA5", fg="white")
-        sched_header.pack(anchor="w", padx=20, pady=(10,5))
-
+        
+        tk.Checkbutton(startup_frame, text="Show tray notifications for threats", 
+                      variable=self._tray_notify_var, command=on_tray_notify_toggle,
+                      bg="#007777", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=15, pady=(4,8))
+        
+        # Info note
+        tk.Label(frame, text="💡 Tip: Running in the system tray keeps VWAR active without cluttering your taskbar.",
+                bg="#009AA5", fg="#FFEB3B", font=("Arial", 10), wraplength=700, justify="left").pack(anchor="w", padx=20, pady=10)
+        
+        return canvas
+    
+    # ========== TAB 2: SCHEDULED SCANS ==========
+    def _build_schedule_tab(self, parent):
+        import tkinter as tk
+        
+        # Scrollable frame
+        canvas = tk.Canvas(parent, bg="#009AA5", highlightthickness=0)
+        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        frame = tk.Frame(canvas, bg="#009AA5")
+        
+        frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        # Mouse wheel
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        ui_font = ("Arial", 11)
+        section_font = ("Arial", 14, "bold")
+        
+        # === Schedule Configuration ===
+        self._create_section_header(frame, "📅 Schedule Configuration", section_font)
+        
         from Scanning.scheduled_scan import load_scan_schedule, save_scan_schedule, ScanScheduleConfig
         cfg = load_scan_schedule()
         self._sched_enabled_var = tk.BooleanVar(value=True)
@@ -475,79 +557,110 @@ class VWARScannerGUI:
         self._sched_freq_var = tk.StringVar(value=cfg.frequency)
         self._sched_interval_var = tk.StringVar(value=str(cfg.interval_minutes))
         self._sched_last_run = tk.StringVar(value=cfg.last_run or "Never")
-        weekdays = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-        self._weekday_vars = []
-
-        sched_enable_chk = tk.Checkbutton(frame, text="Enable Scheduled Scan", variable=self._sched_enabled_var,
-                       bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font)
-        sched_enable_chk.pack(anchor="w", padx=30)
-        sched_enable_chk.config(state="disabled")
-
-        # Frequency selection
-        freq_row = tk.Frame(frame, bg="#009AA5")
-        freq_row.pack(fill="x", padx=30, pady=2)
-        tk.Label(freq_row, text="Frequency:", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
-        for val, label in [
-            ("realtime","Realtime"),
-            ("hourly","Hourly"),
-            ("twice_daily","Twice Daily"),
-            ("daily","Daily"),
-            ("custom","Custom")
+        
+        # Card-style container
+        schedule_card = tk.Frame(frame, bg="#007777", relief="ridge", bd=2)
+        schedule_card.pack(fill="x", padx=20, pady=5)
+        
+        # Frequency (Horizontal modern buttons)
+        tk.Label(schedule_card, text="Scan Frequency:", bg="#007777", fg="white", 
+                font=("Arial", 12, "bold")).pack(anchor="w", padx=15, pady=(15,8))
+        
+        freq_container = tk.Frame(schedule_card, bg="#007777")
+        freq_container.pack(fill="x", padx=15, pady=5)
+        
+        for val, label, emoji in [
+            ("realtime", "Realtime", "⚡"),
+            ("hourly", "Hourly", "⏰"),
+            ("daily", "Daily", "📅"),
+            ("custom", "Custom", "⚙️")
         ]:
-            tk.Radiobutton(freq_row, text=label, value=val, variable=self._sched_freq_var,
-                           bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(side="left", padx=5)
-
-        # Time input
-        time_row = tk.Frame(frame, bg="#009AA5")
-        time_row.pack(fill="x", padx=30, pady=2)
-        tk.Label(time_row, text="Time (HH:MM 24h):", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
-        tk.Entry(time_row, textvariable=self._sched_time_var, width=8, font=ui_font).pack(side="left", padx=5)
-
-        # Placeholder for legacy weekday row (hidden with new model)
-        weekday_row = tk.Frame(frame, bg="#009AA5")  # kept for layout consistency; not populated
-
-        # Custom interval minutes
-        interval_row = tk.Frame(frame, bg="#009AA5")
-        interval_row.pack(fill="x", padx=30, pady=2)
-        tk.Label(interval_row, text="Custom Interval (minutes):", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
-        tk.Entry(interval_row, textvariable=self._sched_interval_var, width=6, font=ui_font).pack(side="left", padx=5)
-
-        # Paths section with directory picker
-        path_row = tk.Frame(frame, bg="#009AA5")
-        path_row.pack(fill="x", padx=30, pady=2)
-        tk.Label(path_row, text="Paths (separate with ;):", bg="#009AA5", fg="white", font=ui_font).pack(side="left", anchor="w")
-        path_entry = tk.Entry(path_row, textvariable=self._sched_paths_var, font=ui_font)
-        path_entry.pack(side="left", padx=5, fill="x", expand=True)
+            tk.Radiobutton(freq_container, text=f"{emoji} {label}", value=val, 
+                          variable=self._sched_freq_var,
+                          bg="#007777", fg="white", selectcolor="#004d4d", 
+                          font=ui_font, indicatoron=0, width=12, relief="raised", bd=2,
+                          activebackground="#009AA5").pack(side="left", padx=5)
+        
+        # Time & Interval (Grid layout)
+        config_frame = tk.Frame(schedule_card, bg="#007777")
+        config_frame.pack(fill="x", padx=15, pady=10)
+        
+        # Time
+        time_frame = tk.Frame(config_frame, bg="#007777")
+        time_frame.grid(row=0, column=0, sticky="w", padx=(0,20))
+        
+        tk.Label(time_frame, text="⏰ Time (HH:MM):", bg="#007777", fg="white", 
+                font=ui_font).pack(side="left", padx=(0,10))
+        time_entry = tk.Entry(time_frame, textvariable=self._sched_time_var, width=8, 
+                             font=("Arial", 12), justify="center")
+        time_entry.pack(side="left")
+        
+        # Custom interval
+        interval_frame = tk.Frame(config_frame, bg="#007777")
+        interval_frame.grid(row=0, column=1, sticky="w")
+        
+        tk.Label(interval_frame, text="⚙️ Custom Interval:", bg="#007777", fg="white", 
+                font=ui_font).pack(side="left", padx=(0,10))
+        interval_entry = tk.Entry(interval_frame, textvariable=self._sched_interval_var, 
+                                 width=6, font=("Arial", 12), justify="center")
+        interval_entry.pack(side="left")
+        tk.Label(interval_frame, text="min", bg="#007777", fg="white", 
+                font=ui_font).pack(side="left", padx=(5,0))
+        
+        # Paths
+        tk.Label(schedule_card, text="Scan Paths:", bg="#007777", fg="white", 
+                font=("Arial", 12, "bold")).pack(anchor="w", padx=15, pady=(15,8))
+        
+        path_container = tk.Frame(schedule_card, bg="#007777")
+        path_container.pack(fill="x", padx=15, pady=5)
+        
+        path_entry = tk.Entry(path_container, textvariable=self._sched_paths_var, 
+                             font=ui_font, relief="solid", bd=1)
+        path_entry.pack(side="left", fill="x", expand=True, padx=(0,10))
+        
         def add_dir():
             from tkinter import filedialog
-            d = filedialog.askdirectory()
+            d = filedialog.askdirectory(title="Add Folder to Scan")
             if d:
                 current = self._sched_paths_var.get().strip()
                 self._sched_paths_var.set((current+';' if current else '') + d)
-        tk.Button(path_row, text="+Dir", command=add_dir, bg="#007777", fg="white", font=ui_font).pack(side="left", padx=5)
-
-        tk.Checkbutton(frame, text="Include Subdirectories", variable=self._sched_recursive_var,
-                       bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=30, pady=2)
-
-        # Last run display
-        last_run_row = tk.Frame(frame, bg="#009AA5")
-        last_run_row.pack(fill="x", padx=30, pady=(4,2))
-        tk.Label(last_run_row, text="Last Run:", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
-        tk.Label(last_run_row, textvariable=self._sched_last_run, bg="#009AA5", fg="yellow", font=ui_font).pack(side="left")
-
-        # Validation feedback label
-        self._sched_feedback = tk.Label(frame, text="", bg="#009AA5", fg="yellow", font=ui_font)
-        self._sched_feedback.pack(anchor="w", padx=30)
-
+        
+        tk.Button(path_container, text="📁 Add Folder", command=add_dir, 
+                 bg="#009AA5", fg="white", font=("Arial", 10, "bold"), 
+                 relief="raised", bd=2, cursor="hand2").pack(side="left")
+        
+        # Options
+        tk.Checkbutton(schedule_card, text="Include subdirectories", 
+                      variable=self._sched_recursive_var,
+                      bg="#007777", fg="white", selectcolor="#004d4d", 
+                      font=ui_font).pack(anchor="w", padx=15, pady=8)
+        
+        # Last run & Actions
+        status_frame = tk.Frame(schedule_card, bg="#006666", relief="sunken", bd=1)
+        status_frame.pack(fill="x", padx=15, pady=10)
+        
+        tk.Label(status_frame, text="Last Run:", bg="#006666", fg="#AAAAAA", 
+                font=("Arial", 9)).pack(side="left", padx=10, pady=5)
+        tk.Label(status_frame, textvariable=self._sched_last_run, bg="#006666", 
+                fg="#FFEB3B", font=("Arial", 9, "bold")).pack(side="left")
+        
+        # Feedback label
+        self._sched_feedback = tk.Label(schedule_card, text="", bg="#007777", 
+                                       fg="yellow", font=ui_font)
+        self._sched_feedback.pack(anchor="w", padx=15, pady=(0,5))
+        
+        # Action buttons
+        btn_container = tk.Frame(schedule_card, bg="#007777")
+        btn_container.pack(fill="x", padx=15, pady=(0,15))
+        
         def validate_time(t: str) -> bool:
             import re
             return bool(re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", t))
-
+        
         def save_schedule():
-            # Gather and validate
             raw_time = self._sched_time_var.get().strip()
             if self._sched_freq_var.get() in ('hourly','twice_daily','daily') and not validate_time(raw_time):
-                self._sched_feedback.config(text="Invalid time format. Use HH:MM (24h)", fg="red")
+                self._sched_feedback.config(text="❌ Invalid time format. Use HH:MM (24h)", fg="red")
                 return
             try:
                 interval_val = int(self._sched_interval_var.get())
@@ -555,9 +668,10 @@ class VWARScannerGUI:
                     raise ValueError
             except Exception:
                 if self._sched_freq_var.get() == 'custom':
-                    self._sched_feedback.config(text="Interval must be positive integer", fg="red")
+                    self._sched_feedback.config(text="❌ Interval must be positive integer", fg="red")
                     return
                 interval_val = 1440
+            
             raw_paths = [p.strip() for p in self._sched_paths_var.get().split(';') if p.strip()]
             new_cfg = ScanScheduleConfig(
                 enabled=self._sched_enabled_var.get(),
@@ -565,63 +679,102 @@ class VWARScannerGUI:
                 paths=raw_paths,
                 include_subdirs=self._sched_recursive_var.get(),
                 frequency=self._sched_freq_var.get(),
-                weekdays=[],
                 interval_minutes=interval_val,
                 last_run=cfg.last_run
             )
             save_scan_schedule(new_cfg)
-            self._sched_feedback.config(text="Saved", fg="green")
-            # Refresh last run display from persisted file
+            self.scheduled_scan_runner.reload_config()
+            self._sched_feedback.config(text="✅ Schedule saved successfully!", fg="lime")
             updated = load_scan_schedule()
             self._sched_last_run.set(updated.last_run or "Never")
-
-        btn_row = tk.Frame(frame, bg="#009AA5")
-        btn_row.pack(anchor="w", padx=30, pady=5)
-        tk.Button(btn_row, text="Save", command=save_schedule, bg="#007777", fg="white", font=ui_font).pack(side="left")
+        
         def run_now():
             self.scheduled_scan_runner.run_now()
-        tk.Button(btn_row, text="Run Now", command=run_now, bg="#555577", fg="white", font=ui_font).pack(side="left", padx=10)
         
-        # === Inline Exclusions Section ===
-        tk.Label(frame, text="", bg="#009AA5").pack(pady=15)  # Spacer
+        tk.Button(btn_container, text="💾 Save Schedule", command=save_schedule, 
+                 bg="#4CAF50", fg="white", font=("Arial", 11, "bold"), 
+                 relief="raised", bd=3, cursor="hand2", width=15).pack(side="left", padx=(0,10))
         
-        excl_header = tk.Label(frame, text="Scan Exclusions", font=("Arial", 18, "bold"), bg="#009AA5", fg="white")
-        excl_header.pack(anchor="w", padx=20, pady=(10,5))
+        tk.Button(btn_container, text="▶️ Run Now", command=run_now, 
+                 bg="#2196F3", fg="white", font=("Arial", 11, "bold"), 
+                 relief="raised", bd=3, cursor="hand2", width=15).pack(side="left")
         
-        excl_desc = tk.Label(frame, text="Add paths or file extensions to exclude from all scans.", 
-                            bg="#009AA5", fg="white", font=ui_font, wraplength=800, justify="left")
-        excl_desc.pack(anchor="w", padx=30, pady=(0,10))
+        # Dynamic state management
+        def refresh_enable_state(*_):
+            freq = self._sched_freq_var.get()
+            time_entry.config(state=("normal" if freq in ("hourly","twice_daily","daily") else "disabled"))
+            interval_entry.config(state=("normal" if freq=="custom" else "disabled"))
+        
+        self._sched_freq_var.trace_add('write', lambda *a: refresh_enable_state())
+        refresh_enable_state()
+        
+        return canvas
+    
+    # ========== TAB 3: EXCLUSIONS ==========
+    def _build_exclusions_tab(self, parent):
+        import tkinter as tk
+        
+        # Scrollable frame
+        canvas = tk.Canvas(parent, bg="#009AA5", highlightthickness=0)
+        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        frame = tk.Frame(canvas, bg="#009AA5")
+        
+        frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        # Mouse wheel
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        ui_font = ("Arial", 11)
+        section_font = ("Arial", 14, "bold")
         
         # Import exclusions backend
         from utils.user_exclusions import UserExclusions
         self.user_exclusions = UserExclusions()
         
-        # Create two-column layout for paths and extensions
-        exclusions_container = tk.Frame(frame, bg="#009AA5")
-        exclusions_container.pack(fill="both", expand=True, padx=30, pady=5)
+        # Header
+        self._create_section_header(frame, "🚫 Scan Exclusions", section_font)
         
-        # Left: Excluded Paths
-        left_col = tk.Frame(exclusions_container, bg="#009AA5")
-        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        tk.Label(frame, text="Add paths or file extensions to exclude from all scans (manual, scheduled, and real-time).", 
+                bg="#009AA5", fg="white", font=("Arial", 10), wraplength=700, justify="left").pack(anchor="w", padx=20, pady=(0,15))
         
-        tk.Label(left_col, text="Excluded Paths:", bg="#009AA5", fg="white", font=("Arial", 12, "bold")).pack(anchor="w")
+        # Two-column layout
+        columns_container = tk.Frame(frame, bg="#009AA5")
+        columns_container.pack(fill="both", expand=True, padx=20, pady=5)
         
-        paths_frame = tk.Frame(left_col, bg="#009AA5")
-        paths_frame.pack(fill="both", expand=True)
+        # === LEFT: Excluded Paths ===
+        left_card = tk.Frame(columns_container, bg="#007777", relief="ridge", bd=2)
+        left_card.pack(side="left", fill="both", expand=True, padx=(0,10))
         
-        paths_scrollbar = tk.Scrollbar(paths_frame)
+        tk.Label(left_card, text="📂 Excluded Paths", bg="#006666", fg="white", 
+                font=("Arial", 13, "bold")).pack(fill="x", padx=0, pady=10)
+        
+        # Listbox
+        paths_list_frame = tk.Frame(left_card, bg="#007777")
+        paths_list_frame.pack(fill="both", expand=True, padx=15, pady=(0,10))
+        
+        paths_scrollbar = tk.Scrollbar(paths_list_frame)
         paths_scrollbar.pack(side="right", fill="y")
         
-        self.excl_paths_listbox = tk.Listbox(paths_frame, yscrollcommand=paths_scrollbar.set, height=6, bg="white", fg="black")
+        self.excl_paths_listbox = tk.Listbox(paths_list_frame, yscrollcommand=paths_scrollbar.set, 
+                                             height=10, bg="white", fg="black", font=ui_font,
+                                             relief="solid", bd=1)
         self.excl_paths_listbox.pack(side="left", fill="both", expand=True)
         paths_scrollbar.config(command=self.excl_paths_listbox.yview)
         
-        # Populate paths
+        # Populate
         for path in self.user_exclusions.get_excluded_paths():
             self.excl_paths_listbox.insert("end", path)
         
-        paths_btn_frame = tk.Frame(left_col, bg="#009AA5")
-        paths_btn_frame.pack(fill="x", pady=5)
+        # Buttons
+        paths_btn_frame = tk.Frame(left_card, bg="#007777")
+        paths_btn_frame.pack(fill="x", padx=15, pady=(0,15))
         
         def add_path():
             from tkinter import filedialog
@@ -645,45 +798,56 @@ class VWARScannerGUI:
                 self.user_exclusions.remove_path(path)
                 self.excl_paths_listbox.delete(idx)
         
-        tk.Button(paths_btn_frame, text="+ Add Folder", command=add_path, bg="#007777", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
-        tk.Button(paths_btn_frame, text="+ Add File", command=add_file, bg="#007777", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
-        tk.Button(paths_btn_frame, text="- Remove", command=remove_path, bg="#AA0000", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        tk.Button(paths_btn_frame, text="📁 + Folder", command=add_path, 
+                 bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), 
+                 width=10, cursor="hand2").pack(side="left", padx=2)
+        tk.Button(paths_btn_frame, text="📄 + File", command=add_file, 
+                 bg="#2196F3", fg="white", font=("Arial", 10, "bold"), 
+                 width=10, cursor="hand2").pack(side="left", padx=2)
+        tk.Button(paths_btn_frame, text="🗑️ Remove", command=remove_path, 
+                 bg="#F44336", fg="white", font=("Arial", 10, "bold"), 
+                 width=10, cursor="hand2").pack(side="left", padx=2)
         
-        # Right: Excluded Extensions
-        right_col = tk.Frame(exclusions_container, bg="#009AA5")
-        right_col.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        # === RIGHT: Excluded Extensions ===
+        right_card = tk.Frame(columns_container, bg="#007777", relief="ridge", bd=2)
+        right_card.pack(side="right", fill="both", expand=True, padx=(10,0))
         
-        tk.Label(right_col, text="Excluded Extensions:", bg="#009AA5", fg="white", font=("Arial", 12, "bold")).pack(anchor="w")
+        tk.Label(right_card, text="📎 Excluded Extensions", bg="#006666", fg="white", 
+                font=("Arial", 13, "bold")).pack(fill="x", padx=0, pady=10)
         
-        ext_frame = tk.Frame(right_col, bg="#009AA5")
-        ext_frame.pack(fill="both", expand=True)
+        # Listbox
+        ext_list_frame = tk.Frame(right_card, bg="#007777")
+        ext_list_frame.pack(fill="both", expand=True, padx=15, pady=(0,10))
         
-        ext_scrollbar = tk.Scrollbar(ext_frame)
+        ext_scrollbar = tk.Scrollbar(ext_list_frame)
         ext_scrollbar.pack(side="right", fill="y")
         
-        self.excl_ext_listbox = tk.Listbox(ext_frame, yscrollcommand=ext_scrollbar.set, height=6, bg="white", fg="black")
+        self.excl_ext_listbox = tk.Listbox(ext_list_frame, yscrollcommand=ext_scrollbar.set, 
+                                           height=10, bg="white", fg="black", font=ui_font,
+                                           relief="solid", bd=1)
         self.excl_ext_listbox.pack(side="left", fill="both", expand=True)
         ext_scrollbar.config(command=self.excl_ext_listbox.yview)
         
-        # Populate extensions
+        # Populate
         for ext in self.user_exclusions.get_excluded_extensions():
             self.excl_ext_listbox.insert("end", ext)
         
-        ext_btn_frame = tk.Frame(right_col, bg="#009AA5")
-        ext_btn_frame.pack(fill="x", pady=5)
+        # Buttons
+        ext_btn_frame = tk.Frame(right_card, bg="#007777")
+        ext_btn_frame.pack(fill="x", padx=15, pady=(0,15))
         
         def add_extension():
-            # Create simple dialog
             dialog = tk.Toplevel(self.root)
             dialog.title("Add Extension")
-            dialog.geometry("300x120")
+            dialog.geometry("350x140")
             dialog.configure(bg="#009AA5")
             dialog.transient(self.root)
             dialog.grab_set()
             
-            tk.Label(dialog, text="Enter extension (e.g., .mp4):", bg="#009AA5", fg="white", font=ui_font).pack(pady=10)
-            entry = tk.Entry(dialog, font=ui_font)
-            entry.pack(padx=20, fill="x")
+            tk.Label(dialog, text="Enter extension (e.g., .mp4 or mp4):", 
+                    bg="#009AA5", fg="white", font=("Arial", 11)).pack(pady=15)
+            entry = tk.Entry(dialog, font=("Arial", 12), width=20, justify="center")
+            entry.pack(padx=20)
             entry.focus()
             
             def save_ext():
@@ -695,7 +859,9 @@ class VWARScannerGUI:
                     self.excl_ext_listbox.insert("end", ext)
                 dialog.destroy()
             
-            tk.Button(dialog, text="Add", command=save_ext, bg="#007777", fg="white", font=ui_font).pack(pady=10)
+            tk.Button(dialog, text="Add Extension", command=save_ext, 
+                     bg="#4CAF50", fg="white", font=("Arial", 11, "bold"),
+                     cursor="hand2").pack(pady=15)
             entry.bind('<Return>', lambda e: save_ext())
         
         def remove_extension():
@@ -706,46 +872,67 @@ class VWARScannerGUI:
                 self.user_exclusions.remove_extension(ext)
                 self.excl_ext_listbox.delete(idx)
         
-        tk.Button(ext_btn_frame, text="+ Add Extension", command=add_extension, bg="#007777", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
-        tk.Button(ext_btn_frame, text="- Remove", command=remove_extension, bg="#AA0000", fg="white", font=("Arial", 10)).pack(side="left", padx=2)
+        tk.Button(ext_btn_frame, text="➕ Add Ext", command=add_extension, 
+                 bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), 
+                 width=10, cursor="hand2").pack(side="left", padx=2)
+        tk.Button(ext_btn_frame, text="🗑️ Remove", command=remove_extension, 
+                 bg="#F44336", fg="white", font=("Arial", 10, "bold"), 
+                 width=10, cursor="hand2").pack(side="left", padx=2)
         
-        # Quick presets
-        tk.Label(frame, text="", bg="#009AA5").pack(pady=5)  # Spacer
-        preset_frame = tk.Frame(frame, bg="#009AA5")
-        preset_frame.pack(fill="x", padx=30, pady=5)
-        tk.Label(preset_frame, text="Quick Add:", bg="#009AA5", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=(0,10))
+        # Quick Presets
+        tk.Label(frame, text="", bg="#009AA5").pack(pady=10)
+        self._create_section_header(frame, "⚡ Quick Presets", ("Arial", 12, "bold"))
+        
+        preset_card = tk.Frame(frame, bg="#007777", relief="ridge", bd=2)
+        preset_card.pack(fill="x", padx=20, pady=5)
+        
+        tk.Label(preset_card, text="Quickly exclude common file types:", 
+                bg="#007777", fg="white", font=ui_font).pack(anchor="w", padx=15, pady=(10,5))
+        
+        preset_btns = tk.Frame(preset_card, bg="#007777")
+        preset_btns.pack(fill="x", padx=15, pady=(5,15))
         
         def add_preset(exts, name):
+            count = 0
             for ext in exts:
                 if ext not in self.user_exclusions.get_excluded_extensions():
                     self.user_exclusions.add_extension(ext)
                     self.excl_ext_listbox.insert("end", ext)
+                    count += 1
+            if count > 0:
+                self._create_toast(frame, f"✅ Added {count} {name} extensions", "lime")
         
-        tk.Button(preset_frame, text="Videos (.mp4, .avi, .mkv)", 
-                 command=lambda: add_preset(['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv'], "Videos"),
-                 bg="#005555", fg="white", font=("Arial", 9)).pack(side="left", padx=2)
-        tk.Button(preset_frame, text="Images (.jpg, .png, .gif)", 
-                 command=lambda: add_preset(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg'], "Images"),
-                 bg="#005555", fg="white", font=("Arial", 9)).pack(side="left", padx=2)
-        tk.Button(preset_frame, text="Archives (.zip, .rar, .7z)", 
-                 command=lambda: add_preset(['.zip', '.rar', '.7z', '.tar', '.gz'], "Archives"),
-                 bg="#005555", fg="white", font=("Arial", 9)).pack(side="left", padx=2)
-
-        # --- Dynamic enabling/disabling logic ---
-        def refresh_enable_state(*_):
-            freq = self._sched_freq_var.get()
-            # Time needed for hourly / twice_daily / daily
-            for child in time_row.winfo_children():
-                if isinstance(child, tk.Entry):
-                    child.config(state=("normal" if freq in ("hourly","twice_daily","daily") else "disabled"))
-            # Custom interval entry only for custom
-            for child in interval_row.winfo_children():
-                if isinstance(child, tk.Entry):
-                    child.config(state=("normal" if freq=="custom" else "disabled"))
-        self._sched_freq_var.trace_add('write', lambda *a: refresh_enable_state())
-        refresh_enable_state()
-
-        return container
+        tk.Button(preset_btns, text="🎬 Videos (.mp4, .avi, .mkv, etc.)", 
+                 command=lambda: add_preset(['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm'], "video"),
+                 bg="#9C27B0", fg="white", font=("Arial", 10), cursor="hand2", width=28).pack(side="left", padx=5)
+        
+        tk.Button(preset_btns, text="🖼️ Images (.jpg, .png, .gif, etc.)", 
+                 command=lambda: add_preset(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico'], "image"),
+                 bg="#FF9800", fg="white", font=("Arial", 10), cursor="hand2", width=28).pack(side="left", padx=5)
+        
+        tk.Button(preset_btns, text="📦 Archives (.zip, .rar, .7z, etc.)", 
+                 command=lambda: add_preset(['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'], "archive"),
+                 bg="#795548", fg="white", font=("Arial", 10), cursor="hand2", width=28).pack(side="left", padx=5)
+        
+        return canvas
+    
+    # ========== HELPER METHODS ==========
+    def _create_section_header(self, parent, text, font):
+        """Create a styled section header"""
+        import tkinter as tk
+        header_frame = tk.Frame(parent, bg="#006666", relief="raised", bd=1, height=40)
+        header_frame.pack(fill="x", padx=15, pady=(15,10))
+        header_frame.pack_propagate(False)
+        
+        tk.Label(header_frame, text=text, font=font, bg="#006666", fg="white").pack(pady=8, padx=15, anchor="w")
+    
+    def _create_toast(self, parent, message, color):
+        """Show a temporary toast notification"""
+        import tkinter as tk
+        toast = tk.Label(parent, text=message, bg=color, fg="black", 
+                        font=("Arial", 10, "bold"), relief="raised", bd=2)
+        toast.place(relx=0.5, rely=0.1, anchor="center")
+        parent.after(2000, toast.destroy)
 
     # ---------- Scheduled Scan Progress Modal ----------
     def _ensure_sched_modal(self):
