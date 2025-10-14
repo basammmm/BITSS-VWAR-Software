@@ -4,7 +4,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional, Literal, Callable, Tuple
 from config import SCHEDULED_SCAN_CONFIG_PATH
 from utils.logger import log_message
-from utils.notify import notify
+from utils.notify import notify, notify_app
 from utils.settings import SETTINGS
 from utils.exclusions import is_excluded_path
 try:
@@ -177,6 +177,11 @@ class ScheduledScanRunner:
 
     def _run_scan_job(self, cfg: ScanScheduleConfig):
         log_message(f"[SCHEDULED SCAN] Starting scheduled scan @ {cfg.time} for {len(cfg.paths)} path(s)")
+        # Global toast: scheduled scan started
+        try:
+            notify_app("Scheduled Scan", f"Starting scan of {len(cfg.paths)} path(s)", severity="info", duration_ms=2200)
+        except Exception:
+            pass
         start_time = datetime.now()
         files_to_scan: List[str] = []
         missing_paths: List[str] = []
@@ -224,11 +229,14 @@ class ScheduledScanRunner:
             "ended_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         log_message(f"[SCHEDULED SCAN] Completed. Files={total} Matches={matches} Duration={duration:.2f}s")
-        if matches > 0 and SETTINGS.tray_notifications:
-            try:
+        try:
+            # Prefer in-app toasts; fall back to system tray if not initialized
+            sev = "critical" if matches > 0 else "success"
+            ok = notify_app("Scheduled Scan", f"Completed: {total} files, {matches} matches", severity=sev, duration_ms=2800)
+            if not ok and matches > 0 and SETTINGS.tray_notifications:
                 notify("VWAR Threat Alert", f"Scheduled scan found {matches} suspicious file(s).")
-            except Exception:
-                pass
+        except Exception:
+            pass
         self._emit_complete(summary)
 
     def _scan_path(self, path: str):

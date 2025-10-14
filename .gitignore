@@ -43,3 +43,13 @@ scanvault/
 *.crdownload
 *.part
 *.download
+
+# Test files
+test_*.py
+verify_*.py
+run_with_error_catch.py
+
+# Temporary documents
+File Structure.txt
+New Text Document.txt
+*.tmp.docx

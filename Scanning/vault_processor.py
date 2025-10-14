@@ -14,7 +14,7 @@ from config import SCANVAULT_FOLDER, QUARANTINE_FOLDER
 from Scanning.scanner_core import scan_file_for_realtime, force_scan_vaulted
 from Scanning.quarantine import quarantine_file
 from utils.logger import log_message, telemetry_inc
-from utils.notify import notify
+from utils.notify import notify_app, notify
 from config import POST_RESTORE_RECHECK_DELAY
 
 
@@ -89,7 +89,7 @@ class ScanVaultProcessor:
                             sweep_result = scan_file_for_realtime(original_path)
                             matched2, rule2, file_path2, meta_path2 = sweep_result[:4]
                             if matched2 and meta_path2:
-                                notify("Installer sweep threat detected!", f"RULE: {rule2}\nPath: {file_path2}")
+                                notify_app("Installer sweep threat detected!", f"RULE: {rule2}\nPath: {file_path2}", severity="critical", duration_ms=3200)
                                 log_message(f"[SCANVAULT] Installer sweep threat quarantined: {file_path2}")
                         except Exception as e:
                             log_message(f"[SCANVAULT] Delayed sweep error: {e}")
@@ -130,7 +130,7 @@ class ScanVaultProcessor:
                                 pass
                         log_message(f"[SCANVAULT] Threat quarantined: {vaulted_path} -> {quarantine_path}")
                         try:
-                            notify("Threat quarantined!", f"RULE: {rule}\nPath: {original_path}")
+                            notify_app("Threat quarantined", f"{os.path.basename(original_path)}\nRule: {rule}", severity="critical", duration_ms=3200)
                         except Exception:
                             pass
                         
@@ -180,7 +180,7 @@ class ScanVaultProcessor:
                                         pass
                                 log_message(f"[SCANVAULT] Re-check caught threat, quarantined: {vaulted_path}")
                                 try:
-                                    notify("Threat quarantined!", f"RULE: {rule2}\nPath: {original_path}")
+                                    notify_app("Threat quarantined", f"{os.path.basename(original_path)}\nRule: {rule2}", severity="critical", duration_ms=3200)
                                 except Exception:
                                     pass
                             except Exception as qe2:
@@ -226,6 +226,11 @@ class ScanVaultProcessor:
                         # Immediate recheck at the restored path (fast safety net)
                         try:
                             self._immediate_post_restore_recheck(restored_path, pre_hash)
+                        except Exception:
+                            pass
+                        # Friendly toast on clean restore
+                        try:
+                            notify_app("Clean file restored", os.path.basename(restored_path), severity="success", duration_ms=4200)
                         except Exception:
                             pass
                         # Schedule multiple second-chance rechecks to catch delayed content flips
@@ -276,7 +281,7 @@ class ScanVaultProcessor:
                             quarantine_path = quarantine_file(original_path, matched_rules=['HASH_GUARD_CHANGE'])
                             log_message(f"[SCANVAULT] Hash guard quarantined (delayed): {original_path}")
                             try:
-                                notify("Threat quarantined!", f"RULE: HASH_GUARD_CHANGE\nPath: {original_path}")
+                                notify_app("Hash Guard quarantined", os.path.basename(original_path), severity="critical", duration_ms=3200)
                             except Exception:
                                 pass
                             telemetry_inc('hash_guard_quarantined_on_change')
@@ -343,7 +348,7 @@ class ScanVaultProcessor:
                         quarantine_path = quarantine_file(restored_path, matched_rules=['HASH_GUARD_CHANGE'])
                         log_message(f"[SCANVAULT] Hash guard quarantined (immediate): {restored_path}")
                         try:
-                            notify("Threat quarantined!", f"RULE: HASH_GUARD_CHANGE\nPath: {restored_path}")
+                            notify_app("Hash Guard quarantined", os.path.basename(restored_path), severity="critical", duration_ms=3200)
                         except Exception:
                             pass
                         telemetry_inc('hash_guard_quarantined_on_change')
@@ -362,6 +367,10 @@ class ScanVaultProcessor:
             if matched:
                 log_message(f"[SCANVAULT] Immediate post-restore recheck matched, quarantined: {restored_path}")
                 telemetry_inc('recheck_immediate_match_post_restore')
+                try:
+                    notify_app("Threat quarantined", os.path.basename(restored_path), severity="critical", duration_ms=3200)
+                except Exception:
+                    pass
                 if self.monitor_page and hasattr(self.monitor_page, 'add_to_quarantine_listbox'):
                     try:
                         self.monitor_page.add_to_quarantine_listbox(quarantined_path, meta_path, [rule])
@@ -418,7 +427,7 @@ class ScanVaultProcessor:
                             quarantine_path = quarantine_file(path, matched_rules=['HASH_GUARD_CHANGE'])
                             log_message(f"[SCANVAULT] Sibling sweep hash-guard quarantined: {path}")
                             try:
-                                notify("Threat quarantined!", f"RULE: HASH_GUARD_CHANGE\nPath: {path}")
+                                notify_app("Hash Guard quarantined", os.path.basename(path), severity="critical", duration_ms=3200)
                             except Exception:
                                 pass
                             telemetry_inc('hash_guard_quarantined_on_change')

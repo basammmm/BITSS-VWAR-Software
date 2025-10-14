@@ -8,6 +8,7 @@ from datetime import datetime
 
 from config import SCANVAULT_FOLDER
 from utils.logger import log_message, telemetry_inc
+from utils.notify import notify_app
 
 
 _recent_signatures: dict[str, float] = {}
@@ -85,6 +86,12 @@ def copy_to_vault_for_scan(file_path: str, event: str | None = None) -> Tuple[st
     log_message(f"[SCANVAULT] [installer-copy] {file_path} → {vaulted_path}")
     try:
         telemetry_inc("installer_copy_scan")
+    except Exception:
+        pass
+    # In-app toast: make it clear this is a copy-only installer scan
+    try:
+        bn = os.path.basename(file_path)
+        notify_app("Installer file scanned", f"'{bn}' was copied (not moved) to ScanVault for checking.", severity="info", duration_ms=4200)
     except Exception:
         pass
     return vaulted_path, meta_path

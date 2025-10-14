@@ -16,14 +16,14 @@ class HelpPage(tk.Frame):
     ]
 
     def __init__(self, parent, app):
-        super().__init__(parent, bg="#f6f8fa")
+        super().__init__(parent, bg="#009AA5")
         self.app = app
 
         # Header
-        header = tk.Label(self, text="Help & Usage Guide", font=("Segoe UI", 18, "bold"), bg=self["bg"], fg="#111")
-        header.pack(pady=(16, 6))
-        sub = tk.Label(self, text="Learn how VWAR works and how to use it effectively.", font=("Segoe UI", 10), bg=self["bg"], fg="#444")
-        sub.pack()
+        header = tk.Label(self, text="Help & Usage Guide", font=("Segoe UI", 18, "bold"), bg="#006666", fg="white")
+        header.pack(fill="x", pady=(0, 6))
+        sub = tk.Label(self, text="Learn how VWAR works and how to use it effectively.", font=("Segoe UI", 10), bg=self["bg"], fg="white")
+        sub.pack(pady=(6,12))
 
         # Content area
         body = tk.Frame(self, bg=self["bg"]) 
@@ -42,7 +42,7 @@ class HelpPage(tk.Frame):
             "- If you restore from quarantine, VWAR re-checks the file to ensure it's safe.\n"
             "- Use Settings to enable tray notifications and configure startup.\n"
         )
-        txt = tk.Text(body, height=14, wrap="word", bg="white", fg="#222")
+        txt = tk.Text(body, height=14, wrap="word", bg="#008888", fg="white", font=("Segoe UI", 10))
         txt.insert("1.0", overview)
         txt.config(state="disabled")
         txt.pack(fill="x", padx=2, pady=(0,10))
@@ -69,7 +69,7 @@ class HelpPage(tk.Frame):
             status_lines.append(f"PDF: {os.path.basename(pdf_path)} (updated {ts})")
         else:
             status_lines.append("PDF: not found")
-        tk.Label(body, text=" | ".join(status_lines), bg=self["bg"], fg="#666").pack(anchor="w", pady=(6,0))
+        tk.Label(body, text=" | ".join(status_lines), bg=self["bg"], fg="white").pack(anchor="w", pady=(6,0))
 
     def _make_open_button(self, parent, label, path):
         btn = ttk.Button(parent, text=label, command=(lambda: self._open_file(path)))
