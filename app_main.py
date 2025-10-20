@@ -118,11 +118,11 @@ class VWARScannerGUI:
         Button(self.sidebar, text="♻️ Scan Vault", bg="#007777", fg="white", font=("Arial", 12),
             command=lambda: self.show_page("monitor")).pack(fill="x", padx=10, pady=5)
 
-        Button(self.sidebar, text="❓ Help", bg="#007777", fg="white", font=("Arial", 12),
-            command=lambda: self.show_page("help")).pack(fill="x", padx=10, pady=5)
-
         Button(self.sidebar, text="📅 Schedule Scan", bg="#007777", fg="white", font=("Arial", 12),
             command=lambda: self.show_page("settings")).pack(fill="x", padx=10, pady=5)
+
+        Button(self.sidebar, text="❓ Help", bg="#007777", fg="white", font=("Arial", 12),
+            command=lambda: self.show_page("help")).pack(fill="x", padx=10, pady=5)
 
         # Add spacer to push quit button to bottom
         Label(self.sidebar, bg="#004d4d").pack(fill="both", expand=True)
