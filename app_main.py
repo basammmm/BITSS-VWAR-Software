@@ -86,7 +86,11 @@ class VWARScannerGUI:
 
         # Icon & close handler
         self.root.iconbitmap(ICON_PATH)
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        # Minimize to tray instead of closing
+        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        
+        # Store reference to tray icon (will be set from main.py)
+        self.tray_icon = None
     
     # Allow background threads to schedule GUI updates safely
     def schedule_gui(self, func, *args):
@@ -119,6 +123,13 @@ class VWARScannerGUI:
 
         Button(self.sidebar, text="📅 Schedule Scan", bg="#007777", fg="white", font=("Arial", 12),
             command=lambda: self.show_page("settings")).pack(fill="x", padx=10, pady=5)
+
+        # Add spacer to push quit button to bottom
+        Label(self.sidebar, bg="#004d4d").pack(fill="both", expand=True)
+        
+        # Quit button at the bottom
+        Button(self.sidebar, text="🚪 Quit VWAR", bg="#cc0000", fg="white", font=("Arial", 12, "bold"),
+            command=self.confirm_exit).pack(fill="x", padx=10, pady=10, side="bottom")
 
     
     def create_home_page(self):
@@ -273,6 +284,33 @@ class VWARScannerGUI:
             self.activated_user = "unknown"
             self.valid_till = "unknown"
 
+    def minimize_to_tray(self):
+        """Minimize window to system tray instead of closing."""
+        try:
+            self.root.withdraw()  # Hide the window
+            print("[INFO] Application minimized to system tray")
+        except Exception as e:
+            print(f"[ERROR] Failed to minimize to tray: {e}")
+            # Fallback to closing if tray fails
+            self.on_close()
+    
+    def confirm_exit(self):
+        """Ask user confirmation before exiting the application."""
+        from tkinter import messagebox
+        result = messagebox.askyesno(
+            "Quit VWAR Scanner",
+            "Are you sure you want to quit VWAR Scanner?\n\n"
+            "Real-time protection will be disabled.\n"
+            "Click 'No' to minimize to system tray instead.",
+            icon='warning'
+        )
+        if result:
+            print("[INFO] User confirmed exit")
+            self.on_close()
+        else:
+            print("[INFO] User cancelled exit, minimizing to tray")
+            self.minimize_to_tray()
+    
     def on_close(self):
         """Stops monitoring/backup if running, exits app cleanly."""
         # Stop monitor page's realtime engine if running
@@ -290,6 +328,12 @@ class VWARScannerGUI:
                 pass
         if hasattr(self, "auto_backup"):
             self.auto_backup.stop()
+        # Stop tray icon
+        if hasattr(self, "tray_icon") and self.tray_icon:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
         self.root.destroy()
 
 

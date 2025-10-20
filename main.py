@@ -113,41 +113,52 @@ def main():
                 time.sleep(60)
         except KeyboardInterrupt:
             return
-    elif args.tray:
-        print("[INFO] Tray mode startup")
+    else:
+        # Normal mode: Create GUI with system tray integration
+        print("[INFO] Launching VWAR Scanner GUI with system tray...")
         root = tk.Tk()
-        root.withdraw()  # Hide initially
+        
+        # Start minimized to tray if --tray flag is set
+        if args.tray:
+            root.withdraw()
+        
         app = VWARScannerGUI(root)
-        # Hide window at start
-        root.withdraw()
-        # Create tray icon
+        
+        # Create tray icon functions
         def restore():
             try:
                 root.deiconify()
+                root.state('normal')
                 root.after(0, lambda: root.lift())
-            except Exception:
-                pass
+                root.focus_force()
+            except Exception as e:
+                print(f"[TRAY] Restore failed: {e}")
+        
         def exit_app():
             try:
+                # Stop monitoring and cleanup
+                if hasattr(app, 'on_close'):
+                    app.on_close()
                 root.quit()
             finally:
                 os._exit(0)
+        
         def scan_now():
             try:
-                # Prefer manual scan page if available
-                if "scan" in app.pages:
+                # Restore window first
+                restore()
+                # Show scan page
+                if hasattr(app, 'pages') and "scan" in app.pages:
                     app.show_page("scan")
-                # Or trigger scheduled run for its configured paths
-                if hasattr(app, 'scheduled_scan_runner'):
-                    app.scheduled_scan_runner.run_now()
             except Exception as e:
-                print("[TRAY] Scan now failed", e)
+                print(f"[TRAY] Scan now failed: {e}")
+        
+        # Create system tray icon
         tray = create_tray(restore, exit_app, ICON_PATH, on_scan_now=scan_now)
-        root.mainloop()
-    else:
-        print("[INFO] Launching VWAR Scanner GUI...")
-        root = tk.Tk()
-        app = VWARScannerGUI(root)
+        
+        # Store tray reference in app for access
+        app.tray_icon = tray
+        
         root.mainloop()
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from typing import Callable, Optional
 
 try:
@@ -18,8 +19,20 @@ try:
     import win32con  # type: ignore
     import win32gui  # type: ignore
     import win32gui_struct  # type: ignore
+    import pywintypes  # type: ignore
+    
+    # Shell notify icon constants
+    NIM_ADD = 0x00000000
+    NIM_MODIFY = 0x00000001
+    NIM_DELETE = 0x00000002
+    NIF_MESSAGE = 0x00000001
+    NIF_ICON = 0x00000002
+    NIF_TIP = 0x00000004
+    
+    PYWIN32_AVAILABLE = True
 except Exception:  # pragma: no cover
-    win32api = win32con = win32gui = win32gui_struct = None  # type: ignore
+    win32api = win32con = win32gui = win32gui_struct = pywintypes = None  # type: ignore
+    PYWIN32_AVAILABLE = False
 
 try:
     from utils.logger import log_message
@@ -41,7 +54,7 @@ class TrayIcon:
         self._running = False
 
     def start(self) -> bool:
-        if win32gui is None:
+        if not PYWIN32_AVAILABLE:
             log_message("[TRAY] pywin32 not available; tray disabled")
             return False
         if self._running:
@@ -61,43 +74,71 @@ class TrayIcon:
 
     # Windows message loop implementation
     def _message_loop(self):  # pragma: no cover - GUI thread
-        message_map = {
-            win32con.WM_COMMAND: self._on_command,  # type: ignore
-            win32con.WM_DESTROY: self._on_destroy,  # type: ignore
-            win32con.WM_USER + 20: self._on_notify,  # type: ignore
-        }
-        wc = win32gui.WNDCLASS()  # type: ignore
-        hinst = wc.hInstance = win32api.GetModuleHandle(None)  # type: ignore
-        wc.lpszClassName = "VWARTrayClass"
-        wc.lpfnWndProc = message_map  # type: ignore
         try:
-            class_atom = win32gui.RegisterClass(wc)  # type: ignore
-        except Exception:
-            return
-        self.hwnd = win32gui.CreateWindowEx(0, class_atom, "VWARTray", 0, 0, 0, 0, 0, 0, 0, hinst, None)  # type: ignore
-        # Load icon
-        if self.icon_path and os.path.exists(self.icon_path):
+            # Window class for hidden window
+            wc = win32gui.WNDCLASS()  # type: ignore
+            hinst = wc.hInstance = win32api.GetModuleHandle(None)  # type: ignore
+            wc.lpszClassName = "VWARTrayClass"
+            wc.lpfnWndProc = {
+                win32con.WM_COMMAND: self._on_command,
+                win32con.WM_DESTROY: self._on_destroy,
+                win32con.WM_USER + 20: self._on_notify,
+            }
+            
             try:
-                self.hicon = win32gui.LoadImage(hinst, self.icon_path, win32con.IMAGE_ICON, 0, 0, win32con.LR_LOADFROMFILE)  # type: ignore
+                class_atom = win32gui.RegisterClass(wc)  # type: ignore
             except Exception:
+                # Class might already be registered
+                class_atom = win32gui.WNDCLASS  # type: ignore
+                
+            # Create hidden window
+            self.hwnd = win32gui.CreateWindowEx(
+                0, "VWARTrayClass", "VWARTray", 0, 0, 0, 0, 0, 0, 0, hinst, None
+            )  # type: ignore
+            
+            # Load icon
+            if self.icon_path and os.path.exists(self.icon_path):
+                try:
+                    self.hicon = win32gui.LoadImage(
+                        hinst, self.icon_path, win32con.IMAGE_ICON, 0, 0, 
+                        win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE
+                    )  # type: ignore
+                except Exception as e:
+                    log_message(f"[TRAY] Failed to load icon: {e}")
+                    self.hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)  # type: ignore
+            else:
                 self.hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)  # type: ignore
-        else:
-            self.hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)  # type: ignore
-        flags = win32con.NIF_ICON | win32con.NIF_MESSAGE | win32con.NIF_TIP  # type: ignore
-        nid = (self.hwnd, 0, flags, win32con.WM_USER + 20, self.hicon, self.tooltip)  # type: ignore
-        try:
-            win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)  # type: ignore
-        except Exception:
-            return
-        # Standard message loop
-        while self._running:
-            win32gui.PumpWaitingMessages()  # type: ignore
-            win32gui.Sleep(100)  # type: ignore
-        # Cleanup
-        try:
-            win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)  # type: ignore
-        except Exception:
-            pass
+            
+            # Add tray icon
+            flags = NIF_ICON | NIF_MESSAGE | NIF_TIP
+            nid = (self.hwnd, 0, flags, win32con.WM_USER + 20, self.hicon, self.tooltip)
+            
+            try:
+                win32gui.Shell_NotifyIcon(NIM_ADD, nid)  # type: ignore
+                log_message("[TRAY] Tray icon added successfully")
+            except Exception as e:
+                log_message(f"[TRAY] Failed to add tray icon: {e}")
+                return
+            
+            # Message pump loop
+            while self._running:
+                try:
+                    win32gui.PumpWaitingMessages()  # type: ignore
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            
+            # Cleanup
+            try:
+                win32gui.Shell_NotifyIcon(NIM_DELETE, nid)  # type: ignore
+                log_message("[TRAY] Tray icon removed")
+            except Exception:
+                pass
+                
+        except Exception as e:
+            log_message(f"[TRAY] Message loop error: {e}")
+            import traceback
+            log_message(traceback.format_exc())
 
     def _on_notify(self, hwnd, msg, wparam, lparam):  # pragma: no cover - user interaction
         if lparam == win32con.WM_LBUTTONUP:  # type: ignore
