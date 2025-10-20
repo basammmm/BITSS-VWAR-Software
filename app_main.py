@@ -417,7 +417,18 @@ class VWARScannerGUI:
         from Scanning.scheduled_scan import load_scan_schedule, save_scan_schedule, ScanScheduleConfig
         cfg = load_scan_schedule()
         self._sched_enabled_var = tk.BooleanVar(value=True)
-        self._sched_time_var = tk.StringVar(value=cfg.time)
+        
+        # Parse time into hour and minute
+        try:
+            time_parts = cfg.time.split(':')
+            hour_val = int(time_parts[0]) if len(time_parts) > 0 else 2
+            minute_val = int(time_parts[1]) if len(time_parts) > 1 else 0
+        except:
+            hour_val = 2
+            minute_val = 0
+        
+        self._sched_hour_var = tk.IntVar(value=hour_val)
+        self._sched_minute_var = tk.IntVar(value=minute_val)
         self._sched_paths_var = tk.StringVar(value=";".join(cfg.paths))
         self._sched_recursive_var = tk.BooleanVar(value=cfg.include_subdirs)
         self._sched_freq_var = tk.StringVar(value=cfg.frequency)
@@ -445,11 +456,43 @@ class VWARScannerGUI:
             tk.Radiobutton(freq_row, text=label, value=val, variable=self._sched_freq_var,
                            bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(side="left", padx=5)
 
-        # Time input
+        # Time input with spinboxes
         time_row = tk.Frame(frame, bg="#009AA5")
         time_row.pack(fill="x", padx=30, pady=2)
-        tk.Label(time_row, text="Time (HH:MM 24h):", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
-        tk.Entry(time_row, textvariable=self._sched_time_var, width=8, font=ui_font).pack(side="left", padx=5)
+        tk.Label(time_row, text="Time (24-hour):", bg="#009AA5", fg="white", font=ui_font).pack(side="left")
+        
+        # Hour spinbox
+        self._hour_spinbox = tk.Spinbox(
+            time_row, 
+            from_=0, 
+            to=23, 
+            textvariable=self._sched_hour_var,
+            width=3,
+            font=ui_font,
+            format="%02.0f",
+            wrap=True,
+            state='readonly'
+        )
+        self._hour_spinbox.pack(side="left", padx=5)
+        
+        tk.Label(time_row, text=":", bg="#009AA5", fg="white", font=("Arial", 14, "bold")).pack(side="left")
+        
+        # Minute spinbox
+        self._minute_spinbox = tk.Spinbox(
+            time_row,
+            from_=0,
+            to=59,
+            textvariable=self._sched_minute_var,
+            width=3,
+            font=ui_font,
+            format="%02.0f",
+            wrap=True,
+            increment=5,
+            state='readonly'
+        )
+        self._minute_spinbox.pack(side="left", padx=5)
+        
+        tk.Label(time_row, text="(Hour : Minute)", bg="#009AA5", fg="#cccccc", font=("Arial", 9)).pack(side="left", padx=10)
 
         # Placeholder for legacy weekday row (hidden with new model)
         weekday_row = tk.Frame(frame, bg="#009AA5")  # kept for layout consistency; not populated
@@ -492,10 +535,10 @@ class VWARScannerGUI:
 
         def save_schedule():
             # Gather and validate
-            raw_time = self._sched_time_var.get().strip()
-            if self._sched_freq_var.get() in ('hourly','twice_daily','daily') and not validate_time(raw_time):
-                self._sched_feedback.config(text="Invalid time format. Use HH:MM (24h)", fg="red")
-                return
+            # Combine hour and minute into HH:MM format
+            hour = self._sched_hour_var.get()
+            minute = self._sched_minute_var.get()
+            raw_time = f"{hour:02d}:{minute:02d}"
             try:
                 interval_val = int(self._sched_interval_var.get())
                 if interval_val <= 0:
@@ -532,10 +575,11 @@ class VWARScannerGUI:
         # --- Dynamic enabling/disabling logic ---
         def refresh_enable_state(*_):
             freq = self._sched_freq_var.get()
-            # Time needed for hourly / twice_daily / daily
-            for child in time_row.winfo_children():
-                if isinstance(child, tk.Entry):
-                    child.config(state=("normal" if freq in ("hourly","twice_daily","daily") else "disabled"))
+            # Time spinboxes needed for hourly / twice_daily / daily
+            time_enabled = freq in ("hourly", "twice_daily", "daily")
+            self._hour_spinbox.config(state=("readonly" if time_enabled else "disabled"))
+            self._minute_spinbox.config(state=("readonly" if time_enabled else "disabled"))
+            
             # Custom interval entry only for custom
             for child in interval_row.winfo_children():
                 if isinstance(child, tk.Entry):
