@@ -8,6 +8,7 @@ from datetime import datetime
 
 from config import SCANVAULT_FOLDER
 from utils.logger import log_message, telemetry_inc
+from utils.installation_mode import get_installation_mode
 
 
 _recent_signatures: dict[str, float] = {}
@@ -55,6 +56,11 @@ def vault_capture_file(file_path: str, event: str | None = None) -> Tuple[str, s
     """
     if not os.path.exists(file_path):
         raise RuntimeError(f"File no longer exists: {file_path}")
+    
+    # Check installation mode - skip if installer file
+    install_mode = get_installation_mode()
+    if install_mode.should_skip_file(file_path):
+        raise RuntimeError(f"Skipped by installation mode: {file_path}")
 
     os.makedirs(SCANVAULT_FOLDER, exist_ok=True)
 

@@ -76,9 +76,13 @@ VWAR Scanner is an advanced malware detection and prevention system that combine
 
 ### 🔒 Hardware-Locked Activation
 - **Secure Licensing**: License bound to CPU + Motherboard IDs
+- **Multi-Device Support**: Each license supports up to **2 devices**
+- **Smart Device Management**: Automatic slot allocation (Device 1 & Device 2)
 - **Online Validation**: Encrypted API communication for verification
-- **Renewal System**: Automatic license renewal checking
+- **Real-Time Validation**: Re-validates every 6 hours + time-jump detection
+- **Renewal System**: 7-day advance warning before expiration
 - **Grace Period**: Warnings before expiration
+- **Graceful Degradation**: View quarantine after expiry (scanning disabled)
 - **Offline Mode**: Grace period for temporary internet loss
 
 ### 🖥️ Modern User Interface
@@ -90,9 +94,16 @@ VWAR Scanner is an advanced malware detection and prevention system that combine
 
 ### 🔔 Smart Notifications
 - **Desktop Alerts**: Toast notifications for critical events (via win10toast)
-- **Tray Tooltips**: Status updates in system tray
-- **In-App Indicators**: Visual feedback during operations
-- **Customizable**: Enable/disable notification types
+  - ✅ Scan started/completed notifications
+  - ✅ Threat detection alerts with rule names
+  - ✅ Scheduled scan completion summaries
+- **Dynamic Tray Tooltips**: Real-time status updates in system tray
+  - Shows current scanning file during manual scans
+  - Updates during scheduled scan operations
+  - Resets to idle state when complete
+- **In-App Progress Bars**: Visual feedback on scan pages
+- **Scheduled Scan Modals**: Detailed progress for automated scans
+- **Customizable**: Enable/disable notification types in Settings
 
 ### 🔄 Automatic Updates
 - **GitHub Integration**: Checks for updates via GitHub releases
@@ -237,6 +248,10 @@ See [requirements.txt](requirements.txt) for complete list. Key dependencies:
 
 1. **Run as Administrator** (required for system-wide monitoring)
 2. **Activate License**: Enter license key when prompted
+   - ✅ Each license supports **2 devices**
+   - 🔹 First activation uses **Device Slot 1**
+   - 🔹 Second device uses **Device Slot 2**
+   - ⚠️ Third device will be blocked (max 2 devices)
 3. **Main Interface Opens**: VWAR starts with real-time protection enabled
 
 ### Basic Operations
@@ -316,16 +331,21 @@ Manages automated scanning with flexible frequency options.
 - **Custom**: User-defined interval in minutes
 
 ### 5. License System
-**Files**: `activation/license_utils.py`, `activation/hwid.py`
+**Files**: `activation/license_utils.py`, `activation/hwid.py`, `activation/gui.py`
 
-Hardware-locked licensing with online validation.
+Hardware-locked licensing with online validation and **multi-device support**.
 
 **Security Features:**
 - CPU + Motherboard fingerprinting
+- **2-Device License Support**: Each key activates 2 separate devices
+- **Smart Slot Allocation**: Auto-assigns Device 1 and Device 2 slots
+- **Device Verification**: Checks both slots during validation
 - Fernet encryption for local storage
 - SHA256 key derivation
 - Periodic validation (every 6 hours)
-- Time-jump detection
+- Time-jump detection (prevents date manipulation)
+- 7-day expiry warnings
+- Graceful degradation on expiry
 
 ---
 
@@ -508,6 +528,18 @@ Key test files:
 - Verify: License key is correct
 - Contact: support@bobosohomail.com
 
+**Issue: "Device Limit Reached" error**
+- Cause: License already activated on 2 other devices
+- Solution: Deactivate one existing device first
+- Note: Each license supports maximum 2 devices
+- Contact: support@bobosohomail.com to manage devices
+
+**Issue: "Device no longer authorized" error**
+- Cause: Device was removed from license slots
+- Solution: Re-activate with license key (will use available slot)
+- Note: Admin may have reassigned device slot to another PC
+- Contact: support@bobosohomail.com if unauthorized
+
 **Issue: False positive detection**
 - Solution: Restore from Scan Vault page
 - Report: Email support with file details
@@ -572,25 +604,30 @@ VWAR Scanner is proprietary software developed by **Bitss.one**.
 
 ## 📊 Version History
 
-### v1.0.0 (Current)
-- ✅ Real-time malware detection
-- ✅ YARA-based scanning
-- ✅ ScanVault system
-- ✅ Scheduled scanning
-- ✅ System tray integration
-- ✅ Hardware-locked licensing
-- ✅ Backup & restore
-- ✅ Modern tabbed help system
-- ✅ Hour/minute time picker
+### v1.0.0 (Current - October 2025)
+- ✅ Real-time malware detection with C++ monitor
+- ✅ YARA-based scanning engine
+- ✅ ScanVault file isolation system
+- ✅ Flexible scheduled scanning (Hourly/Daily/Custom)
+- ✅ System tray integration with minimize-to-tray
+- ✅ **2-Device License Support** (NEW!)
+- ✅ **Real-Time License Validation** (6-hour checks, time-jump detection)
+- ✅ **Enhanced Toast Notifications** (Scan events, threat alerts)
+- ✅ **Dynamic Tray Tooltips** (Real-time scan status)
+- ✅ Hardware-locked licensing with encryption
+- ✅ Backup & restore system
+- ✅ Modern tabbed help system with 5 comprehensive tabs
+- ✅ Hour/minute time picker spinboxes
 - ✅ Comprehensive documentation
 
-### Roadmap
-- 🔄 Custom exclusion lists
-- 🔄 Installation Mode toggle
-- 🔄 Enhanced notifications
+### Roadmap (Coming Soon)
+- 🔄 Installation Mode toggle for software installers
+- 🔄 Multi-threaded ScanVault processing
+- 🔄 Custom exclusion lists in Settings
+- 🔄 Digital signature verification for trusted publishers
 - 🔄 Cloud-based rule updates
 - 🔄 Multi-language support
-- 🔄 Advanced reporting
+- 🔄 Advanced reporting & analytics
 
 ---
 

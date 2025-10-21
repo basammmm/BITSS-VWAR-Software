@@ -2,7 +2,7 @@ import os
 import sys
 import ctypes
 import tkinter as tk
-from activation.license_utils import is_activated
+from activation.license_utils import is_activated, LicenseValidator
 from activation.gui import show_activation_window
 from app_main import VWARScannerGUI
 from utils.update_checker import check_for_updates
@@ -13,6 +13,7 @@ import argparse
 from utils.startup import is_startup_enabled
 from utils.tray import create_tray
 from config import ICON_PATH
+from utils.notify import notify
 
 def is_admin():
     """Check if running with administrator privileges."""
@@ -74,22 +75,31 @@ def main():
     parser.add_argument("--silent", action="store_true", help="Run services only (no GUI)")
     parser.add_argument("--tray", action="store_true", help="Start minimized to system tray")
     parser.add_argument("--help", action="store_true", help="Show help and exit")
+    parser.add_argument("--no-admin", action="store_true", help="Skip admin check (dev mode)")
     args, unknown = parser.parse_known_args()
     if args.help:
-        print("VWAR Scanner options:\n  --silent   Run background services only (monitor, scheduler)\n  --tray     Start to system tray; GUI shown when icon clicked\n  --help     Show this help")
+        print("VWAR Scanner options:\n  --silent   Run background services only (monitor, scheduler)\n  --tray     Start to system tray; GUI shown when icon clicked\n  --no-admin Skip admin elevation (for development)\n  --help     Show this help")
         return
     # check_exe_name()
-    if already_running():
+    
+    # Check if already running (skip in dev mode)
+    if not args.no_admin and already_running():
         root = tk.Tk()
         root.withdraw()
         messagebox.showinfo("VWAR Scanner", "VWAR is already running.")
         sys.exit()
 
-    # Step 1: Elevate to admin
-    if not is_admin():
-        print("[INFO] Not running as admin. Relaunching...")
-        run_as_admin()
-        return
+    # Step 1: Elevate to admin (skip if --no-admin flag or running from Python directly)
+    if not args.no_admin and not is_admin():
+        # Only relaunch if running from compiled .exe
+        if getattr(sys, 'frozen', False):
+            print("[INFO] Not running as admin. Relaunching...")
+            run_as_admin()
+            return
+        else:
+            print("[WARNING] Running in development mode without admin privileges.")
+            print("[INFO] Some features (real-time monitoring) may not work properly.")
+            print("[TIP] Use 'python main.py --no-admin' to suppress this warning.")
 
     # Step 2: Check activation
     activated, reason = is_activated()
@@ -123,6 +133,38 @@ def main():
             root.withdraw()
         
         app = VWARScannerGUI(root)
+        
+        # Define license validation callbacks
+        def on_license_invalid(reason):
+            """Called when license becomes invalid during runtime."""
+            print(f"[LICENSE] License invalidated: {reason}")
+            # Notify user
+            try:
+                notify("⚠️ License Invalid", f"Your license is no longer valid.\n{reason}")
+            except Exception:
+                pass
+            # Trigger graceful degradation
+            app.degrade_to_view_only(reason)
+        
+        def on_expiry_warning(days_left):
+            """Called when license is expiring soon (7 days or less)."""
+            print(f"[LICENSE] Expiry warning: {days_left} days remaining")
+            # Notify user
+            try:
+                notify("⏰ License Expiring Soon", 
+                       f"Your license expires in {days_left} day(s).\nPlease renew to continue using VWAR Scanner.")
+            except Exception:
+                pass
+        
+        # Start real-time license validation
+        license_validator = LicenseValidator(
+            on_invalid_callback=on_license_invalid,
+            on_expiry_warning_callback=on_expiry_warning
+        )
+        license_validator.start()
+        
+        # Store validator reference for cleanup
+        app.license_validator = license_validator
         
         # Create tray icon functions
         def restore():

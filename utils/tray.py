@@ -1,11 +1,3 @@
-"""System tray integration for VWAR.
-
-Provides a minimal wrapper to show a Windows notification area (system tray)
-icon with a context menu allowing the user to restore the full GUI or exit.
-
-Relies on pywin32. If unavailable or any call fails, functions degrade
-gracefully and return False.
-"""
 from __future__ import annotations
 
 import os
@@ -71,6 +63,18 @@ class TrayIcon:
                 win32gui.PostMessage(self.hwnd, win32con.WM_CLOSE, 0, 0)  # type: ignore
             except Exception:
                 pass
+    
+    def update_tooltip(self, new_tooltip: str):
+        """Update the tray icon tooltip dynamically."""
+        if not PYWIN32_AVAILABLE or not self.hwnd or not self.hicon:
+            return
+        try:
+            self.tooltip = new_tooltip
+            flags = NIF_TIP
+            nid = (self.hwnd, 0, flags, 0, 0, new_tooltip)
+            win32gui.Shell_NotifyIcon(NIM_MODIFY, nid)  # type: ignore
+        except Exception as e:
+            log_message(f"[TRAY] Failed to update tooltip: {e}")
 
     # Windows message loop implementation
     def _message_loop(self):  # pragma: no cover - GUI thread

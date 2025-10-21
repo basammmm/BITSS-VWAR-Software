@@ -79,7 +79,9 @@
 import os
 import requests
 import json
-from datetime import datetime
+import threading
+import time
+from datetime import datetime, timedelta
 from config import ACTIVATION_FILE, API_GET
 from activation.hwid import get_processor_info, get_motherboard_info
 from cryptography.fernet import Fernet
@@ -162,6 +164,20 @@ def is_activated():
 
                 if found:
                     server_valid_till = found.get("valid_till")
+                    
+                    # Verify device is still authorized (check both device slots)
+                    device1_cpu = found.get("processor_id")
+                    device1_mobo = found.get("motherboard_id")
+                    device2_cpu = found.get("processor_id_2")
+                    device2_mobo = found.get("motherboard_id_2")
+                    
+                    # Check if current device matches either slot
+                    is_device1 = (current_cpu == device1_cpu and current_mobo == device1_mobo)
+                    is_device2 = (current_cpu == device2_cpu and current_mobo == device2_mobo)
+                    
+                    if not (is_device1 or is_device2):
+                        return False, "Device no longer authorized. This device has been removed from the license."
+                    
                     if server_valid_till:
                         server_end = datetime.strptime(server_valid_till, "%Y-%m-%d %H:%M:%S")
                         if now <= server_end:
@@ -169,7 +185,7 @@ def is_activated():
                             _store_activation(found, current_cpu, current_mobo)
                             return True, None
 
-                return False, "License expired. \n This license key has expired. Please renew your license.\n contact us on : \n https://bitss.one/contact"
+                return False, "License expired.\nThis license key has expired. Please renew your license.\nContact us at: https://bitss.one/contact"
 
             except Exception as e:
                 return False, f"License expired. Failed to check renewal server: {e}"
@@ -179,3 +195,210 @@ def is_activated():
 
     except Exception as e:
         return False, f"Failed to validate activation: {e}"
+
+
+# === Real-Time License Validation System ===
+
+class LicenseValidator:
+    """Background thread for real-time license validation.
+    
+    Features:
+    - Periodic validation every 6 hours
+    - Time-jump detection (>1 hour backward)
+    - 7-day expiry warning notifications
+    - Graceful degradation to view-only mode on expiry
+    """
+    
+    def __init__(self, on_invalid_callback=None, on_expiry_warning_callback=None):
+        """Initialize license validator.
+        
+        Args:
+            on_invalid_callback: Function to call when license becomes invalid
+            on_expiry_warning_callback: Function to call for expiry warnings (days_left)
+        """
+        self._running = False
+        self._thread = None
+        self._lock = threading.Lock()
+        self._last_check_time = None
+        self._last_valid_till = None
+        
+        # Callbacks
+        self.on_invalid = on_invalid_callback
+        self.on_expiry_warning = on_expiry_warning_callback
+        
+        # Configuration
+        self.check_interval = 6 * 3600  # 6 hours in seconds
+        self.warning_days = 7  # Warn when 7 days or less remaining
+        self.time_jump_threshold = 3600  # 1 hour backward = suspicious
+        
+        # State tracking
+        self.is_valid = True
+        self.last_validation_time = None
+        self.days_until_expiry = None
+        
+    def start(self):
+        """Start background validation thread."""
+        if self._running:
+            return
+        
+        self._running = True
+        self._last_check_time = time.time()
+        
+        # Perform initial validation
+        self._validate()
+        
+        # Start background thread
+        self._thread = threading.Thread(target=self._validation_loop, daemon=True, name="LicenseValidator")
+        self._thread.start()
+        
+        print("[LICENSE] Real-time validation started (6-hour intervals)")
+    
+    def stop(self):
+        """Stop background validation thread."""
+        self._running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2)
+        print("[LICENSE] Real-time validation stopped")
+    
+    def _validation_loop(self):
+        """Main validation loop - runs every 6 hours."""
+        while self._running:
+            try:
+                current_time = time.time()
+                time_since_last_check = current_time - self._last_check_time
+                
+                # Detect time jump backward (system clock manipulation)
+                if time_since_last_check < -self.time_jump_threshold:
+                    print(f"[LICENSE] Time jump detected: {-time_since_last_check:.0f}s backward")
+                    print("[LICENSE] Possible system clock manipulation - forcing validation")
+                    self._validate()
+                    self._last_check_time = current_time
+                
+                # Periodic validation every 6 hours
+                elif time_since_last_check >= self.check_interval:
+                    print("[LICENSE] Periodic validation check (6-hour interval)")
+                    self._validate()
+                    self._last_check_time = current_time
+                
+                # Sleep for 1 minute between checks
+                time.sleep(60)
+                
+            except Exception as e:
+                print(f"[LICENSE] Validation loop error: {e}")
+                time.sleep(60)
+    
+    def _validate(self):
+        """Perform license validation and trigger callbacks."""
+        with self._lock:
+            try:
+                activated, reason = is_activated()
+                self.last_validation_time = datetime.now()
+                
+                if not activated:
+                    # License is invalid
+                    print(f"[LICENSE] Validation FAILED: {reason}")
+                    self.is_valid = False
+                    
+                    # Trigger callback for invalid license
+                    if self.on_invalid:
+                        try:
+                            self.on_invalid(reason)
+                        except Exception as e:
+                            print(f"[LICENSE] Callback error: {e}")
+                    
+                else:
+                    # License is valid - check expiry date
+                    print("[LICENSE] Validation PASSED")
+                    self.is_valid = True
+                    
+                    # Check days until expiry
+                    try:
+                        with open(ACTIVATION_FILE, "rb") as f:
+                            encrypted = f.read()
+                            decrypted = fernet.decrypt(encrypted)
+                            data = json.loads(decrypted.decode("utf-8"))
+                        
+                        valid_till = data.get("valid_till")
+                        if valid_till:
+                            end_date = datetime.strptime(valid_till, "%Y-%m-%d %H:%M:%S")
+                            days_left = (end_date - datetime.now()).days
+                            self.days_until_expiry = days_left
+                            
+                            # Store for time-jump detection
+                            self._last_valid_till = valid_till
+                            
+                            # Trigger warning if expiring soon
+                            if 0 < days_left <= self.warning_days:
+                                print(f"[LICENSE] WARNING: License expires in {days_left} days")
+                                if self.on_expiry_warning:
+                                    try:
+                                        self.on_expiry_warning(days_left)
+                                    except Exception as e:
+                                        print(f"[LICENSE] Warning callback error: {e}")
+                            else:
+                                print(f"[LICENSE] License valid for {days_left} days")
+                    
+                    except Exception as e:
+                        print(f"[LICENSE] Failed to check expiry date: {e}")
+            
+            except Exception as e:
+                print(f"[LICENSE] Validation error: {e}")
+                self.is_valid = False
+    
+    def force_validate(self):
+        """Force immediate validation (can be called from UI)."""
+        print("[LICENSE] Force validation requested")
+        self._validate()
+        return self.is_valid
+    
+    def get_status(self):
+        """Get current license status.
+        
+        Returns:
+            dict: {
+                'is_valid': bool,
+                'last_check': datetime,
+                'days_until_expiry': int or None
+            }
+        """
+        with self._lock:
+            return {
+                'is_valid': self.is_valid,
+                'last_check': self.last_validation_time,
+                'days_until_expiry': self.days_until_expiry
+            }
+
+
+# Global validator instance (initialized in main.py)
+_license_validator = None
+
+def get_license_validator():
+    """Get global license validator instance."""
+    return _license_validator
+
+def start_license_validation(on_invalid_callback=None, on_expiry_warning_callback=None):
+    """Start global license validation thread.
+    
+    Args:
+        on_invalid_callback: Function(reason) called when license becomes invalid
+        on_expiry_warning_callback: Function(days_left) called when license expiring soon
+    
+    Returns:
+        LicenseValidator: The global validator instance
+    """
+    global _license_validator
+    
+    if _license_validator is None:
+        _license_validator = LicenseValidator(
+            on_invalid_callback=on_invalid_callback,
+            on_expiry_warning_callback=on_expiry_warning_callback
+        )
+    
+    _license_validator.start()
+    return _license_validator
+
+def stop_license_validation():
+    """Stop global license validation thread."""
+    global _license_validator
+    if _license_validator:
+        _license_validator.stop()

@@ -33,18 +33,33 @@ def _icon_path() -> str | None:
 import os
 
 
+# Global toaster instance (thread-safe when used with threaded=True)
+_toaster_instance = None
+
+def _get_toaster():
+    """Get or create the global ToastNotifier instance."""
+    global _toaster_instance
+    if _toaster_instance is None and _ToastNotifier is not None:
+        try:
+            _toaster_instance = _ToastNotifier()
+        except Exception:
+            pass
+    return _toaster_instance
+
+
 def notify(title: str, message: str, duration: int = 10) -> bool:
     """Send a desktop notification.
 
     Tries multiple backends in order:
-    1) plyer (cross-platform)
-    2) win10toast (Windows toast)
+    1) plyer (most stable, cross-platform)
+    2) win10toast (Windows toast - has some stderr noise but works)
+    3) pywin32 balloon (fallback)
 
     Returns True on success, False otherwise. Logs any errors.
     """
     icon = _icon_path()
 
-    # Backend 1: plyer
+    # Backend 1: plyer (most stable)
     try:
         if _plyer_notification is not None:
             # Some plyer backends accept app_icon; ignore if not supported
@@ -57,19 +72,33 @@ def notify(title: str, message: str, duration: int = 10) -> bool:
     except Exception as e:
         log_message(f"[NOTIFY][plyer] failed: {e}")
 
-    # Backend 2: win10toast (non-blocking)
+    # Backend 2: win10toast (non-blocking with threaded=True)
     try:
-        if _ToastNotifier is not None:
-            toaster = _ToastNotifier()
-            # threaded=True to avoid blocking; this returns immediately
-            ok = toaster.show_toast(title, message, icon_path=icon, duration=duration, threaded=True)
-            if ok is None:
-                # Some versions return None; we treat as best-effort success
+        toaster = _get_toaster()
+        if toaster is not None:
+            # threaded=True makes show_toast non-blocking by running in its own thread
+            # Must be called from main thread, but it spawns worker thread internally
+            import threading
+            import sys
+            import io
+            
+            # Temporarily suppress stderr to hide win10toast's internal thread warnings
+            old_stderr = sys.stderr
+            sys.stderr = io.StringIO()
+            
+            try:
+                result = toaster.show_toast(
+                    title, 
+                    message, 
+                    icon_path=icon, 
+                    duration=duration, 
+                    threaded=True  # This spawns internal thread, returns immediately
+                )
                 log_message("[NOTIFY] Dispatched via win10toast (threaded)")
                 return True
-            if ok:
-                log_message("[NOTIFY] Dispatched via win10toast")
-                return True
+            finally:
+                # Restore stderr
+                sys.stderr = old_stderr
     except Exception as e:
         log_message(f"[NOTIFY][win10toast] failed: {e}")
 

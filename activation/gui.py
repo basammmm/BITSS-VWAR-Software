@@ -243,7 +243,9 @@ def show_activation_window(reason=None):
 
 
 def activate(license_key, root):
-    """Handles the activation process: check key, match hardware, and activate."""
+    """Handles the activation process: check key, match hardware, and activate.
+    Supports up to 2 devices per license key.
+    """
     if not license_key:
         messagebox.showwarning("Empty Field", "Please enter a license key.")
         return
@@ -253,7 +255,7 @@ def activate(license_key, root):
         records = response.json().get("data", [])
         
     except Exception as e:
-        messagebox.showerror("API Error", f"Failed to connect to activation server {e}")
+        messagebox.showerror("API Error", f"Failed to connect to activation server: {e}")
         return
 
     current_cpu = get_processor_info()
@@ -263,6 +265,7 @@ def activate(license_key, root):
         messagebox.showerror("Hardware Error", "Failed to retrieve hardware information.")
         return
 
+    # Find the license record
     found = None
     for record in records:
         if record.get("password") == license_key:
@@ -273,51 +276,85 @@ def activate(license_key, root):
         messagebox.showerror("Invalid Key", "The license key entered is not valid.")
         return
 
-    server_cpu = found.get("processor_id")
-    server_mobo = found.get("motherboard_id")
+    # Check expiration first (applies to all devices)
+    valid_till = found.get("valid_till")
+    try:
+        expiry = datetime.strptime(valid_till, "%Y-%m-%d %H:%M:%S")
+        if datetime.now() > expiry:
+            messagebox.showerror("Expired Key", "This license key has expired. Please renew your license.\nContact us at: https://bitss.one/contact")
+            return
+    except Exception as e:
+        messagebox.showerror("Invalid Date", f"Failed to validate license expiry:\n{e}")
+        return
 
-    # Already activated on this PC
-    if current_cpu == server_cpu and current_mobo == server_mobo:
-        # Step: Check expiration before allowing access
-        valid_till = found.get("valid_till")
-        try:
-            expiry = datetime.strptime(valid_till, "%Y-%m-%d %H:%M:%S")
-            if datetime.now() > expiry:
-                messagebox.showerror("Expired Key", "This license key has expired. Please renew your license. \n contact us on : \n https://bitss.one/contact")
-                return
-        except Exception as e:
-            messagebox.showerror("Invalid Date", f"Failed to validate license expiry:\n{e}")
+    # Get device slots from database
+    device1_cpu = found.get("processor_id")
+    device1_mobo = found.get("motherboard_id")
+    device2_cpu = found.get("processor_id_2")
+    device2_mobo = found.get("motherboard_id_2")
+
+    # Check if current device matches Device 1
+    if device1_cpu and device1_mobo:
+        if current_cpu == device1_cpu and current_mobo == device1_mobo:
+            _store_activation(found, current_cpu, current_mobo)
+            messagebox.showinfo("Re-Activation", "VWAR Scanner is already activated on this system (Device 1).")
+            _launch_app(root)
             return
 
-        _store_activation(found, current_cpu, current_mobo)
-        messagebox.showinfo("Re-Activation", "VWAR Scanner is already activated on this system.")
-        _launch_app(root)
+    # Check if current device matches Device 2
+    if device2_cpu and device2_mobo:
+        if current_cpu == device2_cpu and current_mobo == device2_mobo:
+            _store_activation(found, current_cpu, current_mobo)
+            messagebox.showinfo("Re-Activation", "VWAR Scanner is already activated on this system (Device 2).")
+            _launch_app(root)
+            return
+
+    # Try to bind to an empty slot
+    # Priority: Device 1 first, then Device 2
+    target_slot = None
+    if not device1_cpu or not device1_mobo:
+        # Device 1 slot is empty
+        target_slot = 1
+    elif not device2_cpu or not device2_mobo:
+        # Device 2 slot is empty
+        target_slot = 2
+    else:
+        # Both slots are occupied by different devices
+        messagebox.showerror(
+            "Device Limit Reached", 
+            "This license key is already activated on 2 devices.\n\n"
+            "Maximum device limit reached. To activate on this device,\n"
+            "please deactivate one of the existing devices first.\n\n"
+            "Contact support: https://bitss.one/contact"
+        )
         return
 
-    # Key is in use on another system
-    elif server_cpu and server_mobo:
-        messagebox.showerror("Key In Use", "This key is already activated on another system.")
-        return
-
-    # Key is valid but not yet activated → POST to bind
+    # Bind to the available slot
     try:
         bind_payload = {
             "id": found["id"],
+            "slot": target_slot,  # Tell server which slot to use (1 or 2)
             "processor_id": current_cpu,
             "motherboard_id": current_mobo
         }
         
         bind_response = requests.post(API_POST, json=bind_payload)
-        a = bind_response.json()
-        print(a['status'])
+        result = bind_response.json()
+        print(f"[ACTIVATION] Slot {target_slot} binding result: {result.get('status')}")
         
-        if a['status'] == "success":
+        if result.get('status') == "success":
             _store_activation(found, current_cpu, current_mobo)
-            messagebox.showinfo("Activated", "Activation successful!")
+            messagebox.showinfo(
+                "Activation Successful", 
+                f"VWAR Scanner activated successfully!\n\n"
+                f"Device Slot: {target_slot} of 2\n"
+                f"Valid Until: {valid_till}"
+            )
             _launch_app(root)
             return
         else:
-            messagebox.showerror("Activation Failed", "Server rejected activation attempt.")
+            error_msg = result.get('message', 'Server rejected activation attempt.')
+            messagebox.showerror("Activation Failed", f"Activation failed: {error_msg}")
             return
 
     except Exception as e:

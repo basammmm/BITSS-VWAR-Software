@@ -4,43 +4,49 @@ import json
 import time
 import threading
 import shutil
-from queue import Queue
 import hashlib
+from queue import Queue
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
-
-from config import SCANVAULT_FOLDER, QUARANTINE_FOLDER
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from config import SCANVAULT_FOLDER, QUARANTINE_FOLDER, POST_RESTORE_RECHECK_DELAY
 from Scanning.scanner_core import scan_file_for_realtime, force_scan_vaulted
 from Scanning.quarantine import quarantine_file
 from utils.logger import log_message, telemetry_inc
 from utils.notify import notify
-from config import POST_RESTORE_RECHECK_DELAY
-
 
 class ScanVaultProcessor:
-    """Background processor for ScanVault files using FIFO scanning."""
+    """Background processor for ScanVault files using multi-threaded scanning."""
     
-    def __init__(self, monitor_page_ref=None):
+    def __init__(self, monitor_page_ref=None, max_workers=6):
         self.monitor_page = monitor_page_ref
         self.scan_queue = Queue()
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._max_workers = max_workers  # Number of concurrent scan workers
+        self._executor: Optional[ThreadPoolExecutor] = None
+        self._scan_semaphore = threading.Semaphore(max_workers)  # Limit concurrent YARA scans
+        self._notified_files = set()  # Track files we've already notified about to prevent duplicates
         
     def start(self):
-        """Start the background scanning thread."""
+        """Start the background scanning thread pool."""
         if self._running:
             return
         self._running = True
+        self._executor = ThreadPoolExecutor(max_workers=self._max_workers, thread_name_prefix="VaultWorker")
         self._thread = threading.Thread(target=self._process_loop, daemon=True)
         self._thread.start()
-        log_message("[SCANVAULT] Background processor started")
+        log_message(f"[SCANVAULT] Background processor started with {self._max_workers} workers")
         
     def stop(self):
-        """Stop the background scanning thread."""
+        """Stop the background scanning thread pool."""
         self._running = False
+        if self._executor:
+            self._executor.shutdown(wait=True, cancel_futures=False)
+            self._executor = None
         if self._thread:
-            self._thread.join(timeout=2)
+            self._thread.join(timeout=5)
         log_message("[SCANVAULT] Background processor stopped")
         
     def enqueue_for_scan(self, vaulted_path: str, meta_path: str):
@@ -48,19 +54,68 @@ class ScanVaultProcessor:
         self.scan_queue.put((vaulted_path, meta_path))
         
     def _process_loop(self):
-        """Main processing loop - scans vaulted files and routes them."""
+        """Main processing loop - dispatches vaulted files to worker threads."""
+        futures = []
+        last_cleanup = time.time()
+        
         while self._running:
             try:
+                # Periodically clear notification tracking to prevent memory buildup (every 5 minutes)
+                current_time = time.time()
+                if current_time - last_cleanup > 300:  # 5 minutes
+                    self._notified_files.clear()
+                    last_cleanup = current_time
+                    log_message("[SCANVAULT] Cleared notification tracking cache")
+                
                 # Get next file from queue (blocks with timeout)
                 try:
                     vaulted_path, meta_path = self.scan_queue.get(timeout=1.0)
                 except:
+                    # Check for completed futures periodically
+                    self._check_completed_futures(futures)
                     continue
                     
                 if not os.path.exists(vaulted_path) or not os.path.exists(meta_path):
                     log_message(f"[SCANVAULT] File or metadata missing: {vaulted_path}")
                     continue
+                
+                # Submit scan job to thread pool
+                if self._executor:
+                    future = self._executor.submit(self._scan_and_route_file, vaulted_path, meta_path)
+                    futures.append(future)
                     
+                    # Cleanup completed futures
+                    self._check_completed_futures(futures)
+                    
+            except Exception as e:
+                log_message(f"[SCANVAULT] Loop error: {e}")
+                time.sleep(1)
+        
+        # Wait for remaining futures to complete before shutdown
+        if futures:
+            log_message(f"[SCANVAULT] Waiting for {len(futures)} pending scans to complete...")
+            for future in as_completed(futures, timeout=30):
+                try:
+                    future.result()
+                except Exception as e:
+                    log_message(f"[SCANVAULT] Future error during shutdown: {e}")
+    
+    def _check_completed_futures(self, futures):
+        """Remove completed futures from list."""
+        # Remove completed futures
+        completed = [f for f in futures if f.done()]
+        for f in completed:
+            futures.remove(f)
+            try:
+                f.result()  # Raise exception if any
+            except Exception as e:
+                log_message(f"[SCANVAULT] Worker error: {e}")
+    
+    def _scan_and_route_file(self, vaulted_path: str, meta_path: str):
+        """Scan a vaulted file and route it to quarantine or restore (runs in worker thread)."""
+        # Acquire semaphore to limit concurrent YARA scans
+        with self._scan_semaphore:
+            try:
                 # Load metadata to get original path
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
@@ -68,10 +123,10 @@ class ScanVaultProcessor:
                     original_path = metadata.get('original_path')
                     if not original_path:
                         log_message(f"[SCANVAULT] No original path in metadata: {meta_path}")
-                        continue
+                        return
                 except Exception as e:
                     log_message(f"[SCANVAULT] Failed to read metadata {meta_path}: {e}")
-                    continue
+                    return
                     
                 # Scan the vaulted file
                 log_message(f"[SCANVAULT] Scanning: {vaulted_path}")
@@ -114,10 +169,15 @@ class ScanVaultProcessor:
                             except Exception:
                                 pass
                         log_message(f"[SCANVAULT] Threat quarantined: {vaulted_path} -> {quarantine_path}")
-                        try:
-                            notify("Threat quarantined!", f"RULE: {rule}\nPath: {original_path}")
-                        except Exception:
-                            pass
+                        
+                        # Send notification only once per original file
+                        if original_path not in self._notified_files:
+                            self._notified_files.add(original_path)
+                            try:
+                                file_name = os.path.basename(original_path)
+                                notify("🛡️ ScanVault: Threat Quarantined", f"Rule: {rule}\nFile: {file_name}")
+                            except Exception:
+                                pass
                         
                         # Update UI
                         if self.monitor_page and hasattr(self.monitor_page, 'add_to_quarantine_listbox'):
@@ -164,14 +224,19 @@ class ScanVaultProcessor:
                                     except Exception:
                                         pass
                                 log_message(f"[SCANVAULT] Re-check caught threat, quarantined: {vaulted_path}")
-                                try:
-                                    notify("Threat quarantined!", f"RULE: {rule2}\nPath: {original_path}")
-                                except Exception:
-                                    pass
+                                
+                                # Send notification only once per original file
+                                if original_path not in self._notified_files:
+                                    self._notified_files.add(original_path)
+                                    try:
+                                        file_name = os.path.basename(original_path)
+                                        notify("🛡️ ScanVault: Threat Quarantined", f"Rule: {rule2}\nFile: {file_name}")
+                                    except Exception:
+                                        pass
                             except Exception as qe2:
                                 log_message(f"[SCANVAULT] Re-check quarantine failed: {qe2}")
                             # Skip normal restore path
-                            continue
+                            return
                         # Ensure destination directory exists
                         os.makedirs(os.path.dirname(original_path), exist_ok=True)
                         
@@ -208,6 +273,16 @@ class ScanVaultProcessor:
                                 pass
                             
                         log_message(f"[SCANVAULT] Clean file restored: {vaulted_path} -> {restored_path}")
+                        
+                        # Send notification only once per original file
+                        if original_path not in self._notified_files:
+                            self._notified_files.add(original_path)
+                            try:
+                                file_name = os.path.basename(restored_path)
+                                notify("✅ ScanVault: File Restored", f"Clean file returned\nFile: {file_name}")
+                            except Exception:
+                                pass
+                        
                         # Immediate recheck at the restored path (fast safety net)
                         try:
                             self._immediate_post_restore_recheck(restored_path, pre_hash)

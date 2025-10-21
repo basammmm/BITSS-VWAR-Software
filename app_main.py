@@ -60,6 +60,13 @@ class VWARScannerGUI:
         self.main_area = Frame(self.main_container, bg="#ffffff")
         self.main_area.pack(side="right", fill="both", expand=True)
 
+        # License state tracking (must be initialized before _init_pages)
+        self.license_valid = True
+        self.view_only_mode = False
+        
+        # Closing flag to stop animations gracefully
+        self._is_closing = False
+        
         # Build persistent UI elements
         self.build_sidebar()
         self._init_pages()
@@ -98,6 +105,52 @@ class VWARScannerGUI:
             self.root.after(0, lambda: func(*args))
         except Exception:
             pass
+    
+    def degrade_to_view_only(self, reason="License expired or invalid"):
+        """Disable scanning features, keep quarantine/backup viewing available."""
+        if self.view_only_mode:
+            return  # Already degraded
+        
+        self.view_only_mode = True
+        self.license_valid = False
+        print(f"[APP] Entering view-only mode: {reason}")
+        
+        # Show warning banner on home page
+        try:
+            from tkinter import messagebox
+            self.root.after(0, lambda: messagebox.showwarning(
+                "License Invalid",
+                f"{reason}\n\n"
+                "Scanning features are now disabled.\n"
+                "You can still view quarantined files and backups.\n\n"
+                "Please renew your license to restore full functionality."
+            ))
+        except Exception:
+            pass
+        
+        # Disable scanning features
+        try:
+            # Stop real-time monitoring if active
+            monitor_page = self.pages.get("monitor")
+            if monitor_page and hasattr(monitor_page, "stop_monitoring"):
+                monitor_page.stop_monitoring()
+            
+            # Stop scheduled scans
+            if hasattr(self, "scheduled_scan_runner"):
+                self.scheduled_scan_runner.stop()
+        except Exception as e:
+            print(f"[APP] Error stopping scans: {e}")
+        
+        # Recreate home page with warning banner
+        try:
+            if "home" in self.pages:
+                self.pages["home"].destroy()
+            self.create_home_page()
+        except Exception as e:
+            print(f"[APP] Error updating home page: {e}")
+        
+        # Switch to home page to show warning
+        self.root.after(0, self.show_page, "home")
         
         
     def build_sidebar(self):
@@ -136,6 +189,14 @@ class VWARScannerGUI:
         frame = Frame(self.main_area, bg="#009AA5")
         self.pages["home"] = frame
         
+        # 🔴 View-Only Mode Warning Banner (shown when license invalid)
+        self.view_only_banner = Frame(frame, bg="#FF4444", height=60)
+        if self.view_only_mode:
+            self.view_only_banner.pack(side="top", fill="x", padx=10, pady=5)
+            Label(self.view_only_banner, 
+                  text="⚠️ VIEW-ONLY MODE: License Invalid - Scanning Disabled", 
+                  font=("Arial", 14, "bold"), 
+                  bg="#FF4444", fg="white").pack(pady=15)
         
         Button(frame, text="📋 License Terms", font=("Arial", 10),
        command=lambda: self.show_page("license_terms")).pack(side='right')
@@ -204,15 +265,29 @@ class VWARScannerGUI:
 
 
     def animate_home_status(self):
-        if getattr(self, "pages", None) and "monitor" in self.pages:
-            monitor_page = self.pages["monitor"]
-            if getattr(monitor_page, "monitoring_active", False):
-                current = self.home_scan_status_label.cget("text")
-                new_text = "Status: Running" if "●" in current else "Status: Running ●"
-                self.home_scan_status_label.config(text=new_text)
-            else:
-                self.home_scan_status_label.config(text="Status: Stopped", fg="red")
-        self.root.after(500, self.animate_home_status)
+        # Check if widget still exists (not destroyed)
+        try:
+            if not self.root.winfo_exists():
+                return  # Stop animation if root window destroyed
+            
+            if not hasattr(self, 'home_scan_status_label') or not self.home_scan_status_label.winfo_exists():
+                return  # Stop animation if label destroyed
+            
+            if getattr(self, "pages", None) and "monitor" in self.pages:
+                monitor_page = self.pages["monitor"]
+                if getattr(monitor_page, "monitoring_active", False):
+                    current = self.home_scan_status_label.cget("text")
+                    new_text = "Status: Running" if "●" in current else "Status: Running ●"
+                    self.home_scan_status_label.config(text=new_text)
+                else:
+                    self.home_scan_status_label.config(text="Status: Stopped", fg="red")
+            
+            # Schedule next animation only if not closing
+            if not getattr(self, '_is_closing', False):
+                self.root.after(500, self.animate_home_status)
+        except Exception as e:
+            # Silently catch any errors during shutdown
+            pass
 
     def show_page(self, name):
         if DEBUG:
@@ -313,6 +388,9 @@ class VWARScannerGUI:
     
     def on_close(self):
         """Stops monitoring/backup if running, exits app cleanly."""
+        # Set closing flag to stop animations
+        self._is_closing = True
+        
         # Stop monitor page's realtime engine if running
         try:
             monitor_page = self.pages.get("monitor")
@@ -346,7 +424,7 @@ class VWARScannerGUI:
     def _init_pages(self):
         """Initialize GUI pages (isolated to avoid indentation issues)."""
         self.create_home_page()
-        self.pages["scan"] = ScanPage(self.main_area, self.show_page)
+        self.pages["scan"] = ScanPage(self.main_area, self.show_page, app_ref=self)
         self.pages["backup"] = BackupMainPage(self.main_area, self.show_page)
         self.pages["manual_backup"] = ManualBackupPage(self.main_area, self.show_page)
         self.pages["restore_backup"] = RestoreBackupPage(self.main_area, self.show_page)

@@ -243,6 +243,8 @@ from Scanning.yara_engine import fetch_and_generate_yara_rules, compile_yara_rul
 from Scanning.quarantine import quarantine_file
 from utils.tooltip import Tooltip
 from utils.logger import log_message
+from utils.notify import notify
+from utils.settings import SETTINGS
 import yara
 import os
 from datetime import datetime
@@ -253,10 +255,11 @@ from Scanning.scanner_core import scan_file_for_realtime
 
 
 class ScanPage(Frame):
-    def __init__(self, root, switch_page_callback):
+    def __init__(self, root, switch_page_callback, app_ref=None):
         super().__init__(root, bg="#009AA5")
         self.root = root
         self.switch_page_callback = switch_page_callback
+        self.app_ref = app_ref  # Reference to main app for tray access
 
         self.target_path = None
         self.rules = None
@@ -459,13 +462,51 @@ class ScanPage(Frame):
         self.matched_text.delete("1.0", "end")
         self.tested_text.delete("1.0", "end")
 
+        # Update tray tooltip
+        if self.app_ref and hasattr(self.app_ref, 'tray_icon') and self.app_ref.tray_icon:
+            try:
+                self.app_ref.tray_icon.update_tooltip(f"VWAR Scanner - Scanning: {os.path.basename(self.target_path)}")
+            except Exception:
+                pass
+        
+        # Notify scan started (notify is now fully non-blocking)
+        if SETTINGS.tray_notifications:
+            try:
+                notify("🔍 VWAR Scan Started", f"Scanning: {os.path.basename(self.target_path)}")
+            except Exception:
+                pass
+
+        matches_found = 0
+        total_scanned = 0
+        
         if os.path.isfile(self.target_path):
-            self.scan_file(self.target_path)
+            total_scanned = 1
+            if self.scan_file(self.target_path):
+                matches_found += 1
         elif os.path.isdir(self.target_path):
-            self.scan_directory(self.target_path)
+            matches_found, total_scanned = self.scan_directory(self.target_path)
 
         self.progress.stop()
         self.progress_label.config(text="Scan Complete!")
+        
+        # Reset tray tooltip
+        if self.app_ref and hasattr(self.app_ref, 'tray_icon') and self.app_ref.tray_icon:
+            try:
+                self.app_ref.tray_icon.update_tooltip("VWAR Scanner")
+            except Exception:
+                pass
+        
+        # Notify scan complete with total files scanned (notify is now fully non-blocking)
+        if SETTINGS.tray_notifications:
+            try:
+                if matches_found > 0:
+                    notify("🛡️ VWAR Scan Complete", 
+                           f"Scanned {total_scanned} file(s)\nFound {matches_found} threat(s)!")
+                else:
+                    notify("✅ VWAR Scan Complete", 
+                           f"Scanned {total_scanned} file(s)\nNo threats detected. System is clean.")
+            except Exception:
+                pass
 
     def scan_directory(self, directory):
         files = []
@@ -476,15 +517,21 @@ class ScanPage(Frame):
         total = len(files)
         self.progress["maximum"] = total
         self.progress["value"] = 0
-
+        
+        matches_count = 0
         for i, file_path in enumerate(files, 1):
             if self.stop_scan:
                 break
-            self.scan_file(file_path)
+            if self.scan_file(file_path):
+                matches_count += 1
             self.progress["value"] = i
             percent = int((i / total) * 100)
-            self.progress_label.config(text=f"PROGRESS : {percent}%")
+            self.progress_label.config(text=f"PROGRESS : {percent}% ({i}/{total})")
             self.root.update_idletasks()
+        
+        # Return both matches count and total scanned
+        files_scanned = i if self.stop_scan else total
+        return matches_count, files_scanned
 
     def scan_file(self, path):
         self.log(path, "tested")
@@ -495,6 +542,13 @@ class ScanPage(Frame):
 
         if matched:
             self.log(f"[MATCH] {path} => Rule: {rule}", "matched")
+            # Notify threat detected (notify is now fully non-blocking)
+            if SETTINGS.tray_notifications:
+                try:
+                    notify("⚠️ Threat Detected!", f"Rule: {rule}\nFile: {os.path.basename(path)}")
+                except Exception:
+                    pass
+            return True  # Return True if threat found
         else:
             if status == "NO_RULES":
                 self.log(f"[WARN] Rules not loaded when scanning: {path}", "tested")
@@ -507,6 +561,7 @@ class ScanPage(Frame):
             elif status == "ERROR":
                 self.log(f"[ERROR] Unexpected failure scanning: {path}", "tested")
             # CLEAN is silent except already logged as tested
+            return False  # Return False if no threat
 
 
 

@@ -10,6 +10,7 @@ from utils.tooltip import Tooltip
 from utils.logger import log_message
 from config import QUARANTINE_FOLDER, SCANVAULT_FOLDER
 from Scanning.vault_processor import start_vault_processor, stop_vault_processor, get_vault_processor
+from utils.installation_mode import get_installation_mode
 
 class MonitorPage(Frame):
     def __init__(self, root, app_main, switch_page_callback):
@@ -54,6 +55,11 @@ class MonitorPage(Frame):
                bg="#B22222", fg="white", font=("Inter", 10)).place(x=150, y=255, width=120, height=25)
         Button(self, text="Clear History", command=self.clear_vault_history,
                bg="#555577", fg="white", font=("Inter", 10)).place(x=280, y=255, width=120, height=25)
+        
+        # Installation Mode Toggle
+        self.install_mode_button_text = StringVar(value="🔧 Installation Mode: OFF")
+        Button(self, textvariable=self.install_mode_button_text, command=self.toggle_installation_mode,
+               bg="#FF8800", fg="white", font=("Inter", 10, "bold")).place(x=420, y=255, width=220, height=25)
 
         # ---- Divider ----
         Label(self, text="", bg="#009AA5").place(x=20, y=285, width=950, height=2)
@@ -93,6 +99,55 @@ class MonitorPage(Frame):
         # Initial population
         self.update_quarantine_listbox()
         self.update_scanvault_listbox()
+        
+        # Start installation mode timer updater
+        self.update_installation_mode_display()
+
+    # ---------------- Installation Mode Controls ----------------
+    def toggle_installation_mode(self):
+        """Toggle installation mode on/off."""
+        install_mode = get_installation_mode()
+        
+        if install_mode.is_active():
+            # Deactivate
+            install_mode.deactivate()
+            self.install_mode_button_text.set("🔧 Installation Mode: OFF")
+            messagebox.showinfo(
+                "Installation Mode",
+                "Installation Mode Deactivated\n\n"
+                "ScanVault will now capture all files normally."
+            )
+        else:
+            # Activate for 10 minutes
+            install_mode.activate(duration_minutes=10)
+            self.install_mode_button_text.set("🔧 Installation Mode: ON (10:00)")
+            messagebox.showinfo(
+                "Installation Mode Activated",
+                "Installation Mode is now active for 10 minutes.\n\n"
+                "During this time:\n"
+                "• Installer files (.msi, .exe, .dll, etc.) will be skipped\n"
+                "• Files in trusted installer folders will be skipped\n"
+                "• Regular files will still be scanned\n\n"
+                "Mode will auto-deactivate after 10 minutes."
+            )
+    
+    def update_installation_mode_display(self):
+        """Update the installation mode button text with remaining time."""
+        try:
+            install_mode = get_installation_mode()
+            
+            if install_mode.is_active():
+                remaining = install_mode.get_remaining_time()
+                minutes = remaining // 60
+                seconds = remaining % 60
+                self.install_mode_button_text.set(f"🔧 Installation Mode: ON ({minutes:02d}:{seconds:02d})")
+            else:
+                self.install_mode_button_text.set("🔧 Installation Mode: OFF")
+        except Exception:
+            pass
+        
+        # Schedule next update in 1 second
+        self.root.after(1000, self.update_installation_mode_display)
 
     # ---------------- Monitoring Controls ----------------
     def toggle_monitoring(self):
@@ -108,7 +163,37 @@ class MonitorPage(Frame):
             # Start the C++ realtime monitor and pipe
             if self.real_time_monitor is None:
                 self.real_time_monitor = RealTimeMonitor(self)
-            self.real_time_monitor.start_cpp_monitor_engine()
+            
+            # Pass exclusion paths to C++ monitor (includes Installation Mode trusted paths)
+            from utils.exclusions import get_internal_exclude_roots, get_temp_roots
+            from utils.installation_mode import TRUSTED_INSTALLER_PATHS
+            import os
+            
+            exclude_paths = list(get_internal_exclude_roots() | get_temp_roots())
+            
+            # Add Installation Mode trusted system paths (always excluded)
+            # These are Windows system installer locations that should never trigger ScanVault
+            for trusted_path in TRUSTED_INSTALLER_PATHS:
+                # Convert relative pattern to absolute path for C++ monitor
+                if '\\' in trusted_path:
+                    # Try to resolve to absolute path
+                    parts = trusted_path.split('\\')
+                    if parts[0].lower() == 'windows':
+                        abs_path = os.path.join(os.environ.get('SystemRoot', 'C:\\Windows'), *parts[1:])
+                        if os.path.exists(abs_path):
+                            exclude_paths.append(abs_path)
+                    elif parts[0].lower() == 'programdata':
+                        abs_path = os.path.join(os.environ.get('ProgramData', 'C:\\ProgramData'), *parts[1:])
+                        if os.path.exists(abs_path):
+                            exclude_paths.append(abs_path)
+                    elif parts[0].lower() == 'appdata':
+                        # AppData\Local paths are user-specific
+                        user_profile = os.path.expanduser('~')
+                        abs_path = os.path.join(user_profile, *parts)
+                        if os.path.exists(abs_path):
+                            exclude_paths.append(abs_path)
+            
+            self.real_time_monitor.start_cpp_monitor_engine(excludes=exclude_paths)
 
             self.monitoring_active = True
             self.auto_scan_button_text.set("Stop Auto Scanning")

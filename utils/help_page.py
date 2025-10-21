@@ -258,12 +258,20 @@ Innovative file isolation and scanning:
 • Restores clean files automatically
 • Quarantines detected threats
 • Prevents malware execution
+• 🔧 Installation Mode for legitimate installers
 
 How it works:
 1. File created/downloaded → Moved to ScanVault
 2. Scanned with YARA rules
 3. If clean → Restored to original location
 4. If threat → Moved to Quarantine
+
+Installation Mode (NEW):
+• Temporarily skips installer files
+• Active for 10 minutes with countdown timer
+• Reduces false positives during software installation
+• Auto-deactivates after timer expires
+• Toggle from "Scan Vault" page (orange button)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -435,6 +443,17 @@ A: When license expires:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+Q: How many devices can I use with one license?
+A: 🔹 Each license key supports up to 2 devices:
+   • Device Slot 1: First device activation
+   • Device Slot 2: Second device activation
+   • Auto-allocation: System automatically assigns slots
+   • Device limit: Maximum 2 devices per license
+   • To use on a 3rd device: Deactivate one existing device first
+   • Contact support to manage devices: support@bobosohomail.com
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Q: Can I use VWAR with other antivirus software?
 A: Yes! VWAR is designed to complement existing security:
    • Works alongside Windows Defender
@@ -476,12 +495,44 @@ A: Yes! VWAR automatically excludes:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+Q: What is Installation Mode?
+A: 🔧 Installation Mode temporarily disables ScanVault for installer files:
+   
+   When to use:
+   • Installing new software
+   • Installing Windows updates
+   • Running legitimate installers
+   
+   How it works:
+   • Activate from "Scan Vault" page (orange button)
+   • Active for 10 minutes (auto-deactivates)
+   • Skips installer files (.msi, .exe, .dll, .sys, etc.)
+   • Skips files in trusted installer folders
+   • Regular files still scanned normally
+   
+   What gets skipped:
+   ✓ Windows Installer folder files
+   ✓ Windows Update files
+   ✓ System installer directories
+   ✓ User-defined trusted folders (future update)
+   
+   Timer display:
+   • Shows countdown: "Installation Mode: ON (09:45)"
+   • Auto-deactivates when timer reaches 00:00
+   • Click button again to deactivate early
+   
+   Note: Installation Mode reduces false positives during software installation
+         without compromising your overall protection.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Q: What file types does VWAR scan?
 A: VWAR scans all files except:
    • System files (*.sys, *.dll in system folders)
    • Temporary files (*.tmp, *.log)
    • Partial downloads (*.crdownload, *.part)
    • VWAR's own files
+   • Installer files (when Installation Mode active)
    All other files are checked for threats.
 
 """
