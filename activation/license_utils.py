@@ -229,7 +229,7 @@ class LicenseValidator:
     # Configuration
     # Use configurable interval (default set in config.py). This controls how often
     # the client syncs with the server to enforce server-side expiry.
-    self.check_interval = LICENSE_VALIDATION_INTERVAL
+        self.check_interval = LICENSE_VALIDATION_INTERVAL
         self.warning_days = 7  # Warn when 7 days or less remaining
         self.time_jump_threshold = 3600  # 1 hour backward = suspicious
         

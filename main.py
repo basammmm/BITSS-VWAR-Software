@@ -59,7 +59,7 @@ def run_vwar_monitor():
     monitor_path = os.path.join(base_path, "vwar_monitor.exe")
 
     if os.path.exists(monitor_path):
-        try:
+        try:                                                                                        
             subprocess.Popen(
                 [monitor_path],
                 creationflags=subprocess.CREATE_NO_WINDOW
