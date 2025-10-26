@@ -4,7 +4,7 @@
 # YARA_RULE_FOLDER = "assets/yara/"
 # QUARANTINE_FOLDER = "quarantine"
 # BACKUP_FOLDER = "VWARbackup"
-# CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "3.0"
 
 import os
 from utils.path_utils import resource_path
@@ -12,7 +12,10 @@ from utils.path_utils import resource_path
 
 API_GET = "https://bitts.fr/vwar_windows/getAPI.php"
 API_POST = "https://bitts.fr/vwar_windows/postAPI.php"
-UPDATE_URL = "https://raw.githubusercontent.com/AnindhaxNill/VWAR-release/master/update_info.json"
+# API endpoint for toggling or updating auto-renew setting on server
+API_AUTO_RENEW = "https://bitts.fr/vwar_windows/autoReNew.php"
+# Update URL - point to your repository's update info
+UPDATE_URL = "https://raw.githubusercontent.com/TM-Mehrab-Hasan/BITSS-VWAR-Software/main/update_info.json"
 
 
 
