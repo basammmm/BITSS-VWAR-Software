@@ -82,7 +82,7 @@ import json
 import threading
 import time
 from datetime import datetime, timedelta
-from config import ACTIVATION_FILE, API_GET
+from config import ACTIVATION_FILE, API_GET, LICENSE_VALIDATION_INTERVAL
 from activation.hwid import get_processor_info, get_motherboard_info
 from cryptography.fernet import Fernet
 import base64, hashlib
@@ -226,8 +226,10 @@ class LicenseValidator:
         self.on_invalid = on_invalid_callback
         self.on_expiry_warning = on_expiry_warning_callback
         
-        # Configuration
-        self.check_interval = 6 * 3600  # 6 hours in seconds
+    # Configuration
+    # Use configurable interval (default set in config.py). This controls how often
+    # the client syncs with the server to enforce server-side expiry.
+    self.check_interval = LICENSE_VALIDATION_INTERVAL
         self.warning_days = 7  # Warn when 7 days or less remaining
         self.time_jump_threshold = 3600  # 1 hour backward = suspicious
         
@@ -307,9 +309,64 @@ class LicenseValidator:
                             print(f"[LICENSE] Callback error: {e}")
                     
                 else:
-                    # License is valid - check expiry date
-                    print("[LICENSE] Validation PASSED")
+                    # License is valid locally - perform a server sync to enforce
+                    # server-side expiry/changes so that server updates are reflected
+                    # in near-real-time.
+                    print("[LICENSE] Validation PASSED (local); performing server sync")
                     self.is_valid = True
+
+                    # Server synchronization: fetch authoritative record for this license
+                    try:
+                        # Read local activation to get the identifying password/hash
+                        with open(ACTIVATION_FILE, "rb") as f:
+                            encrypted = f.read()
+                            decrypted = fernet.decrypt(encrypted)
+                            data = json.loads(decrypted.decode("utf-8"))
+
+                        local_password = data.get("password")
+                        local_valid_till = data.get("valid_till")
+                        # Query server (API_GET returns data array)
+                        try:
+                            resp = requests.get(API_GET, timeout=8)
+                            records = resp.json().get("data", [])
+                            server_record = next((r for r in records if r.get("password") == local_password), None)
+                        except Exception as e:
+                            server_record = None
+                            print(f"[LICENSE] Server sync failed: {e}")
+
+                        if server_record:
+                            server_valid_till = server_record.get("valid_till")
+                            if server_valid_till:
+                                server_end = datetime.strptime(server_valid_till, "%Y-%m-%d %H:%M:%S")
+                                now = datetime.now()
+                                # If server has expired the license -> invalidate now
+                                if now > server_end:
+                                    print("[LICENSE] Server reports license expired -> invalidating")
+                                    self.is_valid = False
+                                    if self.on_invalid:
+                                        try:
+                                            self.on_invalid("License expired on server")
+                                        except Exception as e:
+                                            print(f"[LICENSE] on_invalid callback error: {e}")
+                                    return
+                                # If server extended validity beyond local, update local file
+                                try:
+                                    local_end = datetime.strptime(local_valid_till, "%Y-%m-%d %H:%M:%S") if local_valid_till else None
+                                except Exception:
+                                    local_end = None
+
+                                if local_end is None or server_end > local_end:
+                                    # Update local activation to match server authoritative record
+                                    try:
+                                        current_cpu = get_processor_info()
+                                        current_mobo = get_motherboard_info()
+                                        _store_activation(server_record, current_cpu, current_mobo)
+                                        print("[LICENSE] Local activation updated from server record")
+                                    except Exception as e:
+                                        print(f"[LICENSE] Failed to update local activation from server: {e}")
+
+                    except Exception as e:
+                        print(f"[LICENSE] Server sync error: {e}")
                     
                     # Check days until expiry
                     try:
