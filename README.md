@@ -2,7 +2,7 @@
 
 **Professional-Grade Real-Time Malware Detection System**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/TM-Mehrab-Hasan/BITSS-VWAR-Software)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/TM-Mehrab-Hasan/BITSS-VWAR-Software)
 [![Python](https://img.shields.io/badge/python-3.11.5+-green.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-Proprietary-red.svg)](https://bitss.one)
@@ -604,7 +604,7 @@ VWAR Scanner is proprietary software developed by **Bitss.one**.
 
 ## 📊 Version History
 
-### v1.0.0 (Current - October 2025)
+### v3.0.0 (Current - October 2025)
 - ✅ Real-time malware detection with C++ monitor
 - ✅ YARA-based scanning engine
 - ✅ ScanVault file isolation system
