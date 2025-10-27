@@ -2,15 +2,22 @@ import os
 import yara
 import requests
 
-from config import YARA_FOLDER
+from config import (
+    YARA_FOLDER, 
+    API_YARA_FETCH, 
+    API_YARA_FETCH_KEY,
+    API_YARA_INSERT,
+    API_YARA_INSERT_KEY
+)
 from utils.logger import log_message
 
 
 def fetch_and_generate_yara_rules(log_func=print):
-    """Fetch categorized YARA rules from remote and store locally."""
+    """Fetch categorized YARA rules from remote and store locally using authenticated API."""
     try:
-        url = "https://library.bitss.one/windows.php"
-        response = requests.get(url)
+        # Use authenticated endpoint with API key
+        headers = {"API-Key": API_YARA_FETCH_KEY}
+        response = requests.get(API_YARA_FETCH, headers=headers, timeout=10)
         response.raise_for_status()
 
         json_data = response.json()
@@ -63,3 +70,51 @@ def compile_yara_rules(rule_folder=YARA_FOLDER, log_func=print):
     except Exception as e:
         log_func(f"[ERROR] Failed to compile YARA rules: {e}")
         return None
+
+
+def insert_yara_rule(category, rule_name, rule_content, strings, log_func=print):
+    """
+    Upload a custom YARA rule to the library server.
+    
+    Args:
+        category (str): Rule category (e.g., 'ransomware', 'trojan', 'spyware')
+        rule_name (str): Name of the YARA rule
+        rule_content (str): Full YARA rule content
+        strings (str): Description or strings from the rule
+        log_func (function): Logging function (default: print)
+    
+    Returns:
+        bool: True if upload successful, False otherwise
+    """
+    try:
+        log_func(f"[INFO] Uploading YARA rule '{rule_name}' to library...")
+        
+        # Prepare payload according to API documentation
+        payload = {
+            "category": category,
+            "rule": rule_content,
+            "strings": strings
+        }
+        
+        # Set authentication headers
+        headers = {
+            "API-Key": API_YARA_INSERT_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        # Send POST request to insert endpoint
+        response = requests.post(API_YARA_INSERT, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            log_func(f"[INFO] Successfully uploaded YARA rule '{rule_name}' to library")
+            return True
+        else:
+            log_func(f"[WARNING] Failed to upload YARA rule. Status: {response.status_code}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        log_func(f"[ERROR] Network error uploading YARA rule: {e}")
+        return False
+    except Exception as e:
+        log_func(f"[ERROR] Failed to upload YARA rule to library: {e}")
+        return False
