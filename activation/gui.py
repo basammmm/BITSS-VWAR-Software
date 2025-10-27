@@ -226,7 +226,7 @@ def show_activation_window(reason=None):
     """Launch the activation GUI window and display the reason if provided."""
     root = tk.Tk()
     root.title("Activate VWAR Scanner")
-    root.geometry("400x250")
+    root.geometry("400x320")  # Increased height for auto-renew checkbox
     root.configure(bg="#1e1e1e")
     # root.iconbitmap(ICON_PATH)
     root.resizable(False, False)
@@ -239,18 +239,38 @@ def show_activation_window(reason=None):
 
     key_entry = tk.Entry(root, font=("Arial", 12), width=30, justify="center")
     key_entry.pack(pady=10)
+    
+    # Auto-renew checkbox
+    auto_renew_var = tk.BooleanVar(value=False)
+    auto_renew_check = tk.Checkbutton(
+        root, 
+        text="Enable Auto-Renew", 
+        variable=auto_renew_var,
+        bg="#1e1e1e", 
+        fg="white", 
+        selectcolor="#2e2e2e",
+        activebackground="#1e1e1e",
+        activeforeground="white",
+        font=("Arial", 10)
+    )
+    auto_renew_check.pack(pady=(5, 10))
 
     tk.Button(
         root, text="Activate", bg="#28a745", fg="white", font=("Arial", 12),
-        command=lambda: activate(key_entry.get(), root)
+        command=lambda: activate(key_entry.get(), root, auto_renew_var.get())
     ).pack(pady=20)
 
     root.mainloop()
 
 
-def activate(license_key, root):
+def activate(license_key, root, auto_renew=False):
     """Handles the activation process: check key, match hardware, and activate.
     Supports up to 2 devices per license key.
+    
+    Args:
+        license_key (str): The license key entered by user
+        root: The Tkinter root window
+        auto_renew (bool): Whether to enable auto-renewal for this license
     """
     if not license_key:
         messagebox.showwarning("Empty Field", "Please enter a license key.")
@@ -303,7 +323,7 @@ def activate(license_key, root):
     # Check if current device matches Device 1
     if device1_cpu and device1_mobo:
         if current_cpu == device1_cpu and current_mobo == device1_mobo:
-            _store_activation(found, current_cpu, current_mobo)
+            _store_activation(found, current_cpu, current_mobo, auto_renew)
             messagebox.showinfo("Re-Activation", "VWAR Scanner is already activated on this system (Device 1).")
             _launch_app(root)
             return
@@ -311,7 +331,7 @@ def activate(license_key, root):
     # Check if current device matches Device 2
     if device2_cpu and device2_mobo:
         if current_cpu == device2_cpu and current_mobo == device2_mobo:
-            _store_activation(found, current_cpu, current_mobo)
+            _store_activation(found, current_cpu, current_mobo, auto_renew)
             messagebox.showinfo("Re-Activation", "VWAR Scanner is already activated on this system (Device 2).")
             _launch_app(root)
             return
@@ -354,12 +374,21 @@ def activate(license_key, root):
         print(f"[ACTIVATION] Slot {target_slot} binding result: {result.get('status')}")
         
         if result.get('status') == "success":
-            _store_activation(found, current_cpu, current_mobo)
+            _store_activation(found, current_cpu, current_mobo, auto_renew)
+            
+            # Sync auto-renew with server if enabled
+            if auto_renew:
+                from activation.license_utils import update_auto_renew_status
+                success, msg = update_auto_renew_status(True)
+                if not success:
+                    print(f"[WARNING] Failed to sync auto-renew: {msg}")
+            
             messagebox.showinfo(
                 "Activation Successful", 
                 f"VWAR Scanner activated successfully!\n\n"
                 f"Device Slot: {target_slot} of 2\n"
-                f"Valid Until: {valid_till}"
+                f"Valid Until: {valid_till}\n"
+                f"Auto-Renew: {'Enabled' if auto_renew else 'Disabled'}"
             )
             _launch_app(root)
             return

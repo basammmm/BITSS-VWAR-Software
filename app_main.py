@@ -484,6 +484,28 @@ class VWARScannerGUI:
         tk.Checkbutton(frame, text="Show tray notifications on detections", variable=self._tray_notify_var,
                        command=on_tray_notify_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,10))
 
+        # License Auto-Renew Section
+        license_header = tk.Label(frame, text="License Settings", font=("Arial", 18, "bold"), bg="#009AA5", fg="white")
+        license_header.pack(anchor="w", padx=20, pady=(15,5))
+
+        from activation.license_utils import get_auto_renew_status, update_auto_renew_status
+        self._auto_renew_var = tk.BooleanVar(value=get_auto_renew_status())
+        self._auto_renew_feedback = tk.Label(frame, text="", bg="#009AA5", fg="white", font=("Arial", 10))
+        
+        def on_auto_renew_toggle():
+            enabled = self._auto_renew_var.get()
+            success, message = update_auto_renew_status(enabled)
+            if success:
+                self._auto_renew_feedback.config(text=message, fg="lime")
+            else:
+                self._auto_renew_feedback.config(text=message, fg="red")
+                self._auto_renew_var.set(not enabled)  # Revert checkbox on failure
+        
+        tk.Checkbutton(frame, text="Enable Auto-Renew (License will be automatically renewed before expiry)", 
+                       variable=self._auto_renew_var,
+                       command=on_auto_renew_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=30, pady=(0,5))
+        self._auto_renew_feedback.pack(anchor="w", padx=30, pady=(0,10))
+
         note = tk.Label(frame, text="Debug mode prints extra diagnostic messages to console/log.",
                         bg="#009AA5", fg="white", wraplength=600, justify="left", font=ui_font)
         note.pack(anchor="w", padx=20, pady=(0,15))

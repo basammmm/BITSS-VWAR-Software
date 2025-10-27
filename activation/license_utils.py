@@ -100,7 +100,7 @@ SECRET_KEY = generate_fernet_key_from_string("VWAR@BIFIN")
 fernet = Fernet(SECRET_KEY)
 
 
-def _store_activation(record, cpu, mobo):
+def _store_activation(record, cpu, mobo, auto_renew=False):
     """Save activation info locally to encrypted activation file."""
     try:
         os.makedirs(os.path.dirname(ACTIVATION_FILE), exist_ok=True)
@@ -111,7 +111,8 @@ def _store_activation(record, cpu, mobo):
             "processor_id": cpu,
             "motherboard_id": mobo,
             "valid_till": record["valid_till"],
-            "created_at": record.get("created_at", "")
+            "created_at": record.get("created_at", ""),
+            "auto_renew": auto_renew
         }
         json_str = json.dumps(data).encode("utf-8")
         encrypted = fernet.encrypt(json_str)
@@ -120,6 +121,83 @@ def _store_activation(record, cpu, mobo):
         print("[INFO] Activation info stored.")
     except Exception as e:
         print(f"[ERROR] Failed to store activation: {e}")
+
+
+def get_auto_renew_status():
+    """Get the current auto-renew status from local activation file."""
+    try:
+        if not os.path.exists(ACTIVATION_FILE):
+            return False
+        
+        with open(ACTIVATION_FILE, "rb") as f:
+            encrypted = f.read()
+            decrypted = fernet.decrypt(encrypted)
+            data = json.loads(decrypted.decode("utf-8"))
+        
+        return data.get("auto_renew", False)
+    except Exception as e:
+        print(f"[ERROR] Failed to get auto-renew status: {e}")
+        return False
+
+
+def update_auto_renew_status(enabled):
+    """
+    Update auto-renew status locally and sync with server.
+    
+    Args:
+        enabled (bool): Whether auto-renew should be enabled
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    from config import API_AUTO_RENEW, API_AUTO_RENEW_KEY
+    
+    try:
+        # Load current activation data
+        if not os.path.exists(ACTIVATION_FILE):
+            return False, "Activation file not found. Please activate first."
+        
+        with open(ACTIVATION_FILE, "rb") as f:
+            encrypted = f.read()
+            decrypted = fernet.decrypt(encrypted)
+            data = json.loads(decrypted.decode("utf-8"))
+        
+        license_id = data.get("id")
+        if not license_id:
+            return False, "License ID not found in activation data."
+        
+        # Update auto-renew on server
+        payload = {
+            "id": license_id,
+            "auto_renew": 1 if enabled else 0
+        }
+        
+        headers = {
+            "API-Key": API_AUTO_RENEW_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(API_AUTO_RENEW, json=payload, headers=headers, timeout=10)
+        result = response.json()
+        
+        if result.get("status") == "success":
+            # Update local file
+            data["auto_renew"] = enabled
+            json_str = json.dumps(data).encode("utf-8")
+            encrypted = fernet.encrypt(json_str)
+            with open(ACTIVATION_FILE, "wb") as f:
+                f.write(encrypted)
+            
+            status_text = "enabled" if enabled else "disabled"
+            return True, f"Auto-renew {status_text} successfully."
+        else:
+            error_msg = result.get("message", "Server rejected auto-renew update.")
+            return False, f"Failed to update auto-renew: {error_msg}"
+            
+    except requests.exceptions.RequestException as e:
+        return False, f"Network error: {e}"
+    except Exception as e:
+        return False, f"Error updating auto-renew: {e}"
 
 
 def is_activated():
