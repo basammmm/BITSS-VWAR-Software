@@ -15,7 +15,7 @@ import urllib.request
 #     "download_url": ""
 # }
 
-CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "3.0.0"
 
 
 def up_to():
