@@ -10,10 +10,31 @@ import os
 from utils.path_utils import resource_path
 
 
-API_GET = "https://bitts.fr/vwar_windows/getAPI.php"
-API_POST = "https://bitts.fr/vwar_windows/postAPI.php"
-# API endpoint for toggling or updating auto-renew setting on server
+# ============================================================
+# API ENDPOINTS - All endpoints now require authentication
+# ============================================================
+
+# License API
+API_LICENSE_FETCH = "https://bitts.fr/vwar_windows/license-fetch"
+API_LICENSE_FETCH_KEY = "FDD56B7B7C46658IBAD28EDCC83CE"
+
+API_HW_INFO_INSERT = "https://bitts.fr/vwar_windows/hw-info-insert"
+API_HW_INFO_INSERT_KEY = "E246F159FBC2B3F39227394CBBD76"
+
 API_AUTO_RENEW = "https://bitts.fr/vwar_windows/autoReNew.php"
+API_AUTO_RENEW_KEY = "E246F159FBC2B3F39227394CBBD76"
+
+# Library API (YARA Rules)
+API_YARA_INSERT = "https://library.bitss.one/vwar_windows/insert-rule"
+API_YARA_INSERT_KEY = "93B78A8977A6617EB2BEDF4235848"
+
+API_YARA_FETCH = "https://bitts.fr/vwar_windows/license-fetch"
+API_YARA_FETCH_KEY = "7A6D317B24AAE34DD74B9B8E35E5F"
+
+# Legacy endpoints (deprecated - use authenticated endpoints above)
+API_GET = API_LICENSE_FETCH  # For backward compatibility
+API_POST = API_HW_INFO_INSERT  # For backward compatibility
+
 # Update URL - point to your repository's update info
 UPDATE_URL = "https://raw.githubusercontent.com/TM-Mehrab-Hasan/BITSS-VWAR-Software/main/update_info.json"
 
@@ -21,12 +42,6 @@ UPDATE_URL = "https://raw.githubusercontent.com/TM-Mehrab-Hasan/BITSS-VWAR-Softw
 # Set to 900 (15 minutes) for near-real-time enforcement. Adjust as needed to balance
 # immediacy vs server load. Set to 60 for 1-minute checks (more aggressive).
 LICENSE_VALIDATION_INTERVAL = 900
-
-
-
-
-
-
 
 
 

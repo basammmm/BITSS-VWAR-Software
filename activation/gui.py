@@ -198,7 +198,13 @@ import requests
 import tkinter as tk
 from tkinter import messagebox
 from activation.hwid import get_processor_info, get_motherboard_info
-from config import ACTIVATION_FILE, API_GET, API_POST
+from config import (
+    ACTIVATION_FILE, 
+    API_LICENSE_FETCH, 
+    API_LICENSE_FETCH_KEY,
+    API_HW_INFO_INSERT,
+    API_HW_INFO_INSERT_KEY
+)
 from app_main import VWARScannerGUI
 from datetime import datetime
 from config import ICON_PATH
@@ -251,7 +257,8 @@ def activate(license_key, root):
         return
     
     try:
-        response = requests.get(API_GET)
+        headers = {"API-Key": API_LICENSE_FETCH_KEY}
+        response = requests.get(API_LICENSE_FETCH, headers=headers)
         records = response.json().get("data", [])
         
     except Exception as e:
@@ -338,7 +345,11 @@ def activate(license_key, root):
             "motherboard_id": current_mobo
         }
         
-        bind_response = requests.post(API_POST, json=bind_payload)
+        headers = {
+            "API-Key": API_HW_INFO_INSERT_KEY,
+            "Content-Type": "application/json"
+        }
+        bind_response = requests.post(API_HW_INFO_INSERT, json=bind_payload, headers=headers)
         result = bind_response.json()
         print(f"[ACTIVATION] Slot {target_slot} binding result: {result.get('status')}")
         

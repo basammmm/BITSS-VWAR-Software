@@ -82,7 +82,12 @@ import json
 import threading
 import time
 from datetime import datetime, timedelta
-from config import ACTIVATION_FILE, API_GET, LICENSE_VALIDATION_INTERVAL
+from config import (
+    ACTIVATION_FILE, 
+    API_LICENSE_FETCH, 
+    API_LICENSE_FETCH_KEY,
+    LICENSE_VALIDATION_INTERVAL
+)
 from activation.hwid import get_processor_info, get_motherboard_info
 from cryptography.fernet import Fernet
 import base64, hashlib
@@ -158,7 +163,8 @@ def is_activated():
         if now > end:
             # Local license expired → check server for renewal
             try:
-                response = requests.get(API_GET, timeout=5)
+                headers = {"API-Key": API_LICENSE_FETCH_KEY}
+                response = requests.get(API_LICENSE_FETCH, headers=headers, timeout=5)
                 records = response.json().get("data", [])
                 found = next((r for r in records if r.get("password") == data.get("password")), None)
 
@@ -325,9 +331,10 @@ class LicenseValidator:
 
                         local_password = data.get("password")
                         local_valid_till = data.get("valid_till")
-                        # Query server (API_GET returns data array)
+                        # Query server (API_LICENSE_FETCH returns data array)
                         try:
-                            resp = requests.get(API_GET, timeout=8)
+                            headers = {"API-Key": API_LICENSE_FETCH_KEY}
+                            resp = requests.get(API_LICENSE_FETCH, headers=headers, timeout=8)
                             records = resp.json().get("data", [])
                             server_record = next((r for r in records if r.get("password") == local_password), None)
                         except Exception as e:
