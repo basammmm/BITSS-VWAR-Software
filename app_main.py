@@ -1,7 +1,7 @@
 import os
 import json
 
-from tkinter import Tk, Frame, Label, Button,LabelFrame
+from tkinter import Tk, Frame, Label, Button, LabelFrame, StringVar
 from config import ICON_PATH, ACTIVATION_FILE, QUARANTINE_FOLDER
 from Scanning.scan_page import ScanPage
 from Backup.main_backup_page import BackupMainPage
@@ -227,6 +227,48 @@ class VWARScannerGUI:
 
         Label(user_info_frame, text=f"Valid Till: {self.valid_till}",
             font=("Arial", 12), bg="white", fg="black").pack(pady=2)
+        
+        # 🔹 Auto-Renew Dropdown
+        from activation.license_utils import get_auto_renew_status, update_auto_renew_status
+        import tkinter.ttk as ttk
+        
+        auto_renew_frame = Frame(user_info_frame, bg="white")
+        auto_renew_frame.pack(pady=5)
+        
+        Label(auto_renew_frame, text="Auto-Renew:", font=("Arial", 12, "bold"), 
+              bg="white", fg="black").pack(side="left", padx=(10, 5))
+        
+        current_status = get_auto_renew_status()
+        self.auto_renew_var = StringVar(value="YES" if current_status else "NO")
+        
+        def on_auto_renew_change(event=None):
+            selected = self.auto_renew_var.get()
+            enabled = (selected == "YES")
+            success, message = update_auto_renew_status(enabled)
+            
+            if success:
+                # Show temporary success message
+                status_text = "enabled" if enabled else "disabled"
+                temp_label = Label(auto_renew_frame, text=f"✓ Auto-renew {status_text}", 
+                                 font=("Arial", 9), bg="white", fg="green")
+                temp_label.pack(side="left", padx=5)
+                self.root.after(3000, temp_label.destroy)  # Remove after 3 seconds
+            else:
+                # Revert selection and show simplified error
+                self.auto_renew_var.set("NO" if enabled else "YES")
+                # Show simplified error message
+                error_msg = "Failed to update. Check connection." if "Network" in message or "Invalid" in message else "Update failed."
+                error_label = Label(auto_renew_frame, text=f"✗ {error_msg}", 
+                                  font=("Arial", 9), bg="white", fg="red")
+                error_label.pack(side="left", padx=5)
+                self.root.after(5000, error_label.destroy)  # Remove after 5 seconds
+                print(f"[AUTO-RENEW ERROR] {message}")  # Log full error to console
+        
+        auto_renew_dropdown = ttk.Combobox(auto_renew_frame, textvariable=self.auto_renew_var,
+                                          values=["YES", "NO"], state="readonly", width=8,
+                                          font=("Arial", 11))
+        auto_renew_dropdown.pack(side="left", padx=5)
+        auto_renew_dropdown.bind("<<ComboboxSelected>>", on_auto_renew_change)
         
         
                         # 🔹 Auto Scan Status
@@ -483,28 +525,6 @@ class VWARScannerGUI:
             SETTINGS.tray_notifications = self._tray_notify_var.get()
         tk.Checkbutton(frame, text="Show tray notifications on detections", variable=self._tray_notify_var,
                        command=on_tray_notify_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=40, pady=(0,10))
-
-        # License Auto-Renew Section
-        license_header = tk.Label(frame, text="License Settings", font=("Arial", 18, "bold"), bg="#009AA5", fg="white")
-        license_header.pack(anchor="w", padx=20, pady=(15,5))
-
-        from activation.license_utils import get_auto_renew_status, update_auto_renew_status
-        self._auto_renew_var = tk.BooleanVar(value=get_auto_renew_status())
-        self._auto_renew_feedback = tk.Label(frame, text="", bg="#009AA5", fg="white", font=("Arial", 10))
-        
-        def on_auto_renew_toggle():
-            enabled = self._auto_renew_var.get()
-            success, message = update_auto_renew_status(enabled)
-            if success:
-                self._auto_renew_feedback.config(text=message, fg="lime")
-            else:
-                self._auto_renew_feedback.config(text=message, fg="red")
-                self._auto_renew_var.set(not enabled)  # Revert checkbox on failure
-        
-        tk.Checkbutton(frame, text="Enable Auto-Renew (License will be automatically renewed before expiry)", 
-                       variable=self._auto_renew_var,
-                       command=on_auto_renew_toggle, bg="#009AA5", fg="white", selectcolor="#004d4d", font=ui_font).pack(anchor="w", padx=30, pady=(0,5))
-        self._auto_renew_feedback.pack(anchor="w", padx=30, pady=(0,10))
 
         note = tk.Label(frame, text="Debug mode prints extra diagnostic messages to console/log.",
                         bg="#009AA5", fg="white", wraplength=600, justify="left", font=ui_font)

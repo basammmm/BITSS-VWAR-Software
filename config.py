@@ -16,19 +16,19 @@ from utils.path_utils import resource_path
 
 # License API
 API_LICENSE_FETCH = "https://bitts.fr/vwar_windows/license-fetch"
-API_LICENSE_FETCH_KEY = "FDD56B7B7C46658IBAD28EDCC83CE"
+API_LICENSE_FETCH_KEY = "FDD56B7B7C466581BAD28EDCC83CE"
 
 API_HW_INFO_INSERT = "https://bitts.fr/vwar_windows/hw-info-insert"
 API_HW_INFO_INSERT_KEY = "E246F159FBC2B3F39227394CBBD76"
 
-API_AUTO_RENEW = "https://bitts.fr/vwar_windows/autoReNew.php"
-API_AUTO_RENEW_KEY = "E246F159FBC2B3F39227394CBBD76"
+API_AUTO_RENEW = "https://bitts.fr/vwar_windows/autoReNew"
+API_AUTO_RENEW_KEY = "47831D7C324F4C929B99AB7D58769"
 
 # Library API (YARA Rules)
 API_YARA_INSERT = "https://library.bitss.one/vwar_windows/insert-rule"
-API_YARA_INSERT_KEY = "93B78A8977A6617EB2BEDF4235848"
+API_YARA_INSERT_KEY = "93B78A8977A6617EB2BEDE4235848"
 
-API_YARA_FETCH = "https://bitts.fr/vwar_windows/license-fetch"
+API_YARA_FETCH = "https://library.bitss.one/vwar_windows/fetch-rule"
 API_YARA_FETCH_KEY = "7A6D317B24AAE34DD74B9B8E35E5F"
 
 # Legacy endpoints (deprecated - use authenticated endpoints above)

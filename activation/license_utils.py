@@ -167,18 +167,24 @@ def update_auto_renew_status(enabled):
             return False, "License ID not found in activation data."
         
         # Update auto-renew on server
+        # Database expects "YES" or "NO" strings
         payload = {
             "id": license_id,
-            "auto_renew": 1 if enabled else 0
+            "auto_renew": "YES" if enabled else "NO"
         }
         
         headers = {
-            "API-Key": API_AUTO_RENEW_KEY,
+            "X-API-Key": API_AUTO_RENEW_KEY,
             "Content-Type": "application/json"
         }
         
         response = requests.post(API_AUTO_RENEW, json=payload, headers=headers, timeout=10)
-        result = response.json()
+        
+        # Check if response is valid JSON
+        try:
+            result = response.json()
+        except json.JSONDecodeError:
+            return False, f"Server returned invalid response (Status: {response.status_code}). Please check API endpoint."
         
         if result.get("status") == "success":
             # Update local file
@@ -191,11 +197,13 @@ def update_auto_renew_status(enabled):
             status_text = "enabled" if enabled else "disabled"
             return True, f"Auto-renew {status_text} successfully."
         else:
-            error_msg = result.get("message", "Server rejected auto-renew update.")
+            error_msg = result.get("message", result.get("error", "Server rejected auto-renew update."))
             return False, f"Failed to update auto-renew: {error_msg}"
             
     except requests.exceptions.RequestException as e:
         return False, f"Network error: {e}"
+    except json.JSONDecodeError as e:
+        return False, f"Invalid server response. API may not be configured correctly."
     except Exception as e:
         return False, f"Error updating auto-renew: {e}"
 

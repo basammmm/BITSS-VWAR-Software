@@ -35,6 +35,10 @@ def get_internal_exclude_roots() -> set[str]:
         os.path.join(base, '.git'),
         os.path.join(base, '.mypy_cache'),
         os.path.join(base, '.pytest_cache'),
+        os.path.join(base, 'VWAR_i'),
+        os.path.join(base, 'VWAR.spec'),
+        os.path.join(base, '.vscode'),
+        os.path.join(base, 'tests'),
     }
     if exe_dir:
         roots.update({
