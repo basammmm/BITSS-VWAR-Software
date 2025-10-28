@@ -72,6 +72,17 @@ class LicenseTermsPage(Frame):
         Label(self, text=message, font=("Arial", 14, "bold"),
               bg="white", fg="red").pack(pady=20)
         
+        # Auto-Renew Status - Dynamic label that updates based on controller's auto_renew_var
+        self.auto_renew_status_label = Label(self, text="", font=("Arial", 14, "bold"),
+                                             bg="white")
+        self.auto_renew_status_label.pack(pady=10)
+        
+        # Store reference to controller for updates
+        self.controller = controller
+        
+        # Update the auto-renew display
+        self.update_auto_renew_display()
+        
 
         # Bullet list
         # for t in LICENSE_TERMS:
@@ -81,6 +92,30 @@ class LicenseTermsPage(Frame):
         # Back button
         Button(self, text="⬅ Back to Home", font=("Arial", 12),
                command=lambda: controller.show_page("home")).pack(pady=20)
+    
+    def update_auto_renew_display(self):
+        """Update the auto-renew status display based on controller's current value."""
+        try:
+            # Get current value from controller's auto_renew_var
+            if hasattr(self.controller, 'auto_renew_var'):
+                current_value = self.controller.auto_renew_var.get()
+                auto_renew_enabled = (current_value == "YES")
+            else:
+                # Fallback to fetching from database if controller doesn't have the var
+                from activation.license_utils import get_auto_renew_status
+                auto_renew_enabled = get_auto_renew_status()
+            
+            auto_renew_text = "✅ Auto-Renew: Enabled" if auto_renew_enabled else "❌ Auto-Renew: Disabled"
+            auto_renew_color = "green" if auto_renew_enabled else "red"
+            
+            self.auto_renew_status_label.config(text=auto_renew_text, fg=auto_renew_color)
+            
+            # Schedule next update in 1 second to keep it in sync
+            self.after(1000, self.update_auto_renew_display)
+        except Exception as e:
+            # If there's an error, just stop updating
+            print(f"[DEBUG] Error updating auto-renew display: {e}")
+            pass
 
     def get_license_status(self, valid_till_str):
         today = datetime.today().date()

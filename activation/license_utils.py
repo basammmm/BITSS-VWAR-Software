@@ -249,8 +249,15 @@ def is_activated():
         if now > end:
             # Local license expired → check server for renewal
             try:
-                headers = {"API-Key": API_LICENSE_FETCH_KEY}
-                response = requests.get(API_LICENSE_FETCH, headers=headers, timeout=5)
+                headers = {
+                    "X-API-Key": API_LICENSE_FETCH_KEY,
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "processor_id": current_cpu,
+                    "motherboard_id": current_mobo
+                }
+                response = requests.post(API_LICENSE_FETCH, json=payload, headers=headers, timeout=5)
                 records = response.json().get("data", [])
                 found = next((r for r in records if r.get("password") == data.get("password")), None)
 
@@ -295,35 +302,39 @@ class LicenseValidator:
     """Background thread for real-time license validation.
     
     Features:
-    - Periodic validation every 6 hours
+    - Periodic validation every 1 hour
     - Time-jump detection (>1 hour backward)
     - 7-day expiry warning notifications
     - Graceful degradation to view-only mode on expiry
     """
     
-    def __init__(self, on_invalid_callback=None, on_expiry_warning_callback=None):
+    def __init__(self, on_invalid_callback=None, on_expiry_warning_callback=None, on_valid_callback=None, app_instance=None):
         """Initialize license validator.
         
         Args:
             on_invalid_callback: Function to call when license becomes invalid
             on_expiry_warning_callback: Function to call for expiry warnings (days_left)
+            on_valid_callback: Function to call when license becomes valid again (after renewal)
+            app_instance: Reference to VWARScannerGUI app for timer reset
         """
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
         self._last_check_time = None
         self._last_valid_till = None
+        self.app = app_instance  # Store app reference for timer reset
         
         # Callbacks
         self.on_invalid = on_invalid_callback
         self.on_expiry_warning = on_expiry_warning_callback
+        self.on_valid = on_valid_callback
         
     # Configuration
     # Use configurable interval (default set in config.py). This controls how often
     # the client syncs with the server to enforce server-side expiry.
         self.check_interval = LICENSE_VALIDATION_INTERVAL
         self.warning_days = 7  # Warn when 7 days or less remaining
-        self.time_jump_threshold = 3600  # 1 hour backward = suspicious
+        self.time_jump_threshold = 30  # 1 hour backward = suspicious
         
         # State tracking
         self.is_valid = True
@@ -345,7 +356,7 @@ class LicenseValidator:
         self._thread = threading.Thread(target=self._validation_loop, daemon=True, name="LicenseValidator")
         self._thread.start()
         
-        print("[LICENSE] Real-time validation started (6-hour intervals)")
+        print("[LICENSE] Real-time validation started (30 second intervals)")
     
     def stop(self):
         """Stop background validation thread."""
@@ -355,7 +366,7 @@ class LicenseValidator:
         print("[LICENSE] Real-time validation stopped")
     
     def _validation_loop(self):
-        """Main validation loop - runs every 6 hours."""
+        """Main validation loop - runs every 1 hour."""
         while self._running:
             try:
                 current_time = time.time()
@@ -368,9 +379,9 @@ class LicenseValidator:
                     self._validate()
                     self._last_check_time = current_time
                 
-                # Periodic validation every 6 hours
+                # Periodic validation every 1 hour
                 elif time_since_last_check >= self.check_interval:
-                    print("[LICENSE] Periodic validation check (6-hour interval)")
+                    print("[LICENSE] Periodic validation check (30-Seconds interval)")
                     self._validate()
                     self._last_check_time = current_time
                 
@@ -385,6 +396,13 @@ class LicenseValidator:
         """Perform license validation and trigger callbacks."""
         with self._lock:
             try:
+                # Reset UI timer when validation starts
+                if self.app and hasattr(self.app, 'reset_license_check_timer'):
+                    try:
+                        self.app.reset_license_check_timer()
+                    except Exception as e:
+                        print(f"[LICENSE] Failed to reset UI timer: {e}")
+                
                 activated, reason = is_activated()
                 self.last_validation_time = datetime.now()
                 
@@ -417,10 +435,22 @@ class LicenseValidator:
 
                         local_password = data.get("password")
                         local_valid_till = data.get("valid_till")
-                        # Query server (API_LICENSE_FETCH returns data array)
+                        
+                        # Get current hardware info for POST request
+                        current_cpu = get_processor_info()
+                        current_mobo = get_motherboard_info()
+                        
+                        # Query server (API_LICENSE_FETCH requires POST with hardware info)
                         try:
-                            headers = {"API-Key": API_LICENSE_FETCH_KEY}
-                            resp = requests.get(API_LICENSE_FETCH, headers=headers, timeout=8)
+                            headers = {
+                                "X-API-Key": API_LICENSE_FETCH_KEY,
+                                "Content-Type": "application/json"
+                            }
+                            payload = {
+                                "processor_id": current_cpu,
+                                "motherboard_id": current_mobo
+                            }
+                            resp = requests.post(API_LICENSE_FETCH, json=payload, headers=headers, timeout=8)
                             records = resp.json().get("data", [])
                             server_record = next((r for r in records if r.get("password") == local_password), None)
                         except Exception as e:
@@ -436,6 +466,16 @@ class LicenseValidator:
                                 if now > server_end:
                                     print("[LICENSE] Server reports license expired -> invalidating")
                                     self.is_valid = False
+                                    
+                                    # Update local file with expired date so UI can show it
+                                    try:
+                                        current_cpu = get_processor_info()
+                                        current_mobo = get_motherboard_info()
+                                        _store_activation(server_record, current_cpu, current_mobo)
+                                        print("[LICENSE] Local activation updated with expired date from server")
+                                    except Exception as e:
+                                        print(f"[LICENSE] Failed to update local activation: {e}")
+                                    
                                     if self.on_invalid:
                                         try:
                                             self.on_invalid("License expired on server")
@@ -455,6 +495,16 @@ class LicenseValidator:
                                         current_mobo = get_motherboard_info()
                                         _store_activation(server_record, current_cpu, current_mobo)
                                         print("[LICENSE] Local activation updated from server record")
+                                        
+                                        # If we were invalid before but now license is extended/renewed and valid
+                                        if not self.is_valid and now <= server_end:
+                                            print("[LICENSE] License renewed/extended - restoring from view-only mode")
+                                            self.is_valid = True
+                                            if self.on_valid:
+                                                try:
+                                                    self.on_valid()
+                                                except Exception as e:
+                                                    print(f"[LICENSE] on_valid callback error: {e}")
                                     except Exception as e:
                                         print(f"[LICENSE] Failed to update local activation from server: {e}")
 

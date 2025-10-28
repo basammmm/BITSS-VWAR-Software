@@ -276,20 +276,35 @@ def activate(license_key, root, auto_renew=False):
         messagebox.showwarning("Empty Field", "Please enter a license key.")
         return
     
-    try:
-        headers = {"API-Key": API_LICENSE_FETCH_KEY}
-        response = requests.get(API_LICENSE_FETCH, headers=headers)
-        records = response.json().get("data", [])
-        
-    except Exception as e:
-        messagebox.showerror("API Error", f"Failed to connect to activation server: {e}")
-        return
-
+    # Get hardware info first
     current_cpu = get_processor_info()
     current_mobo = get_motherboard_info()
 
     if not current_cpu or not current_mobo:
         messagebox.showerror("Hardware Error", "Failed to retrieve hardware information.")
+        return
+    
+    try:
+        # Use POST with hardware info to get license for this device
+        headers = {
+            "X-API-Key": API_LICENSE_FETCH_KEY,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "processor_id": current_cpu,
+            "motherboard_id": current_mobo
+        }
+        response = requests.post(API_LICENSE_FETCH, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            messagebox.showerror("API Error", f"Failed to connect to activation server (Status: {response.status_code})")
+            return
+        
+        data = response.json()
+        records = data.get("data", [])
+        
+    except Exception as e:
+        messagebox.showerror("API Error", f"Failed to connect to activation server: {e}")
         return
 
     # Find the license record
@@ -366,7 +381,7 @@ def activate(license_key, root, auto_renew=False):
         }
         
         headers = {
-            "API-Key": API_HW_INFO_INSERT_KEY,
+            "X-API-Key": API_HW_INFO_INSERT_KEY,
             "Content-Type": "application/json"
         }
         bind_response = requests.post(API_HW_INFO_INSERT, json=bind_payload, headers=headers)

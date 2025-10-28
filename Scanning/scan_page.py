@@ -440,6 +440,21 @@ class ScanPage(Frame):
             self.log(f"[INFO] Selected folder: {path}", "load")
 
     def start_scan_thread(self):
+        # ⚠️ Check if app is in view-only mode (license invalid/expired)
+        if hasattr(self.app_ref, 'view_only_mode') and self.app_ref.view_only_mode:
+            self.log("[ERROR] Scanning disabled: License invalid or expired", "load")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "Scanning Disabled",
+                    "Your license is invalid or expired.\n\n"
+                    "Scanning features are disabled until you renew your license.\n\n"
+                    "Contact support: https://bitss.one/contact"
+                )
+            except Exception:
+                pass
+            return
+        
         self.stop_scan = False
         thread = threading.Thread(target=self.scan, daemon=True)
         thread.start()

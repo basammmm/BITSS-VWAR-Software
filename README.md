@@ -13,6 +13,21 @@ VWAR Scanner is an advanced malware detection and prevention system that combine
 
 ---
 
+## 🎉 What's New in v3.0.0
+
+### 🚀 Major Updates (October 28, 2025)
+
+- **⚡ Real-Time License Validation** - Reduced from 6 hours to **30 seconds**! License changes now detected instantly
+- **🔄 Auto-Renew Management** - New homepage dropdown to enable/disable auto-renewal with real-time sync
+- **🔐 Enhanced API Security** - All 5 endpoints now properly authenticated with X-API-Key headers
+- **📱 Cross-Page Synchronization** - Auto-renew status updates across all pages within 1 second
+- **🎯 Better Device Management** - Re-activation detection for previously authorized devices
+- **🛡️ Installation Mode Exclusions** - Smart detection to reduce false positives during software setup
+
+[See full changelog](#-version-history)
+
+---
+
 ## 📑 Table of Contents
 
 - [Key Features](#-key-features)
@@ -78,12 +93,17 @@ VWAR Scanner is an advanced malware detection and prevention system that combine
 - **Secure Licensing**: License bound to CPU + Motherboard IDs
 - **Multi-Device Support**: Each license supports up to **2 devices**
 - **Smart Device Management**: Automatic slot allocation (Device 1 & Device 2)
+- **Re-Activation Support**: Recognizes previously activated devices automatically
 - **Online Validation**: Encrypted API communication for verification
-- **Real-Time Validation**: Re-validates every 6 hours + time-jump detection
+- **Real-Time Validation**: Re-validates every **30 seconds** for instant expiry detection
+- **Server-Side Enforcement**: License changes (expiry, renewal, revocation) detected within 30 seconds
+- **Auto-Renew Management**: Enable/disable auto-renewal from homepage dropdown
+- **Synchronized Status**: Auto-renew status updates in real-time across all pages
+- **Time-Jump Detection**: Prevents system clock manipulation
 - **Renewal System**: 7-day advance warning before expiration
 - **Grace Period**: Warnings before expiration
 - **Graceful Degradation**: View quarantine after expiry (scanning disabled)
-- **Offline Mode**: Grace period for temporary internet loss
+- **Offline Mode**: Temporary grace period for internet loss
 
 ### 🖥️ Modern User Interface
 - **Intuitive Design**: Clean, professional Tkinter GUI
@@ -339,10 +359,14 @@ Hardware-locked licensing with online validation and **multi-device support**.
 - CPU + Motherboard fingerprinting
 - **2-Device License Support**: Each key activates 2 separate devices
 - **Smart Slot Allocation**: Auto-assigns Device 1 and Device 2 slots
+- **Re-Activation Detection**: Automatically recognizes previously activated devices
 - **Device Verification**: Checks both slots during validation
+- **Real-Time Validation**: Server sync every **30 seconds** (changed from 6 hours)
+- **Auto-Renew Management**: YES/NO dropdown on homepage with real-time sync
+- **Cross-Page Sync**: Auto-renew status updates across all pages within 1 second
+- **API Authentication**: All endpoints secured with X-API-Key headers
 - Fernet encryption for local storage
 - SHA256 key derivation
-- Periodic validation (every 6 hours)
 - Time-jump detection (prevents date manipulation)
 - 7-day expiry warnings
 - Graceful degradation on expiry
@@ -604,30 +628,71 @@ VWAR Scanner is proprietary software developed by **Bitss.one**.
 
 ## 📊 Version History
 
-### v3.0.0 (Current - October 2025)
+### v3.0.0 (Current - October 28, 2025)
+**Major Update: Real-Time Validation & Auto-Renew Management**
+
+#### 🆕 New Features
+- ✅ **Real-Time License Validation** (30-second interval, down from 6 hours)
+  - Server-side changes detected within 30 seconds
+  - Instant expiry enforcement
+  - Immediate renewal recognition
+  - License revocation support
+- ✅ **Auto-Renew Management System**
+  - Homepage dropdown for YES/NO selection
+  - Real-time sync across all pages (1-second updates)
+  - License Terms page shows current auto-renew status
+  - Color-coded status (Green: Enabled, Red: Disabled)
+- ✅ **API Authentication Overhaul**
+  - All 5 API endpoints secured with proper authentication
+  - X-API-Key headers for license operations
+  - Corrected endpoint URLs and keys
+  - Enhanced error handling and logging
+- ✅ **Enhanced 2-Device Licensing**
+  - Re-activation detection for known devices
+  - Better slot management and verification
+  - Clear error messages for device limits
+- ✅ **Installation Mode Exclusions**
+  - Automatic detection of software installations
+  - Smart exclusion of trusted installer paths
+  - Reduced false positives during software setup
+
+#### 🔧 Improvements
+- Updated license validation interval from 900s to 30s
+- Improved API response handling
+- Better error messages for license operations
+- Enhanced UI feedback for auto-renew changes
+- Optimized background validation thread
+- Fixed authentication header formats
+
+#### 📦 Build Updates
+- PyInstaller build with 30+ hidden imports
+- Comprehensive tkinter module inclusion
+- All Windows API dependencies bundled
+- 27.71 MB executable size
+
+### v1.0.0 (Initial Release - October 2025)
 - ✅ Real-time malware detection with C++ monitor
 - ✅ YARA-based scanning engine
 - ✅ ScanVault file isolation system
 - ✅ Flexible scheduled scanning (Hourly/Daily/Custom)
 - ✅ System tray integration with minimize-to-tray
-- ✅ **2-Device License Support** (NEW!)
-- ✅ **Real-Time License Validation** (6-hour checks, time-jump detection)
-- ✅ **Enhanced Toast Notifications** (Scan events, threat alerts)
-- ✅ **Dynamic Tray Tooltips** (Real-time scan status)
+- ✅ 2-Device License Support
 - ✅ Hardware-locked licensing with encryption
 - ✅ Backup & restore system
 - ✅ Modern tabbed help system with 5 comprehensive tabs
+- ✅ Enhanced Toast Notifications
+- ✅ Dynamic Tray Tooltips
 - ✅ Hour/minute time picker spinboxes
 - ✅ Comprehensive documentation
 
 ### Roadmap (Coming Soon)
-- 🔄 Installation Mode toggle for software installers
 - 🔄 Multi-threaded ScanVault processing
-- 🔄 Custom exclusion lists in Settings
+- 🔄 Custom exclusion lists in Settings UI
 - 🔄 Digital signature verification for trusted publishers
 - 🔄 Cloud-based rule updates
 - 🔄 Multi-language support
-- 🔄 Advanced reporting & analytics
+- 🔄 Advanced reporting & analytics dashboard
+- 🔄 Email alerts for critical detections
 
 ---
 

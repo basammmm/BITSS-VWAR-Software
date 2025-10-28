@@ -156,10 +156,23 @@ def main():
             except Exception:
                 pass
         
+        def on_license_valid():
+            """Called when license becomes valid again (after renewal)."""
+            print(f"[LICENSE] License renewed - restoring full functionality")
+            # Notify user
+            try:
+                notify("✅ License Renewed", "Your license has been renewed!\nAll features are now enabled.")
+            except Exception:
+                pass
+            # Restore from view-only mode
+            app.restore_from_view_only()
+        
         # Start real-time license validation
         license_validator = LicenseValidator(
             on_invalid_callback=on_license_invalid,
-            on_expiry_warning_callback=on_expiry_warning
+            on_expiry_warning_callback=on_expiry_warning,
+            on_valid_callback=on_license_valid,
+            app_instance=app  # Pass app reference for timer reset
         )
         license_validator.start()
         

@@ -106,6 +106,12 @@ class VWARScannerGUI:
         except Exception:
             pass
     
+    def reset_license_check_timer(self):
+        """Reset the license check countdown timer (called when validation runs)."""
+        from config import LICENSE_VALIDATION_INTERVAL
+        self.license_check_countdown = LICENSE_VALIDATION_INTERVAL
+        print("[UI] License check timer reset")
+    
     def degrade_to_view_only(self, reason="License expired or invalid"):
         """Disable scanning features, keep quarantine/backup viewing available."""
         if self.view_only_mode:
@@ -150,6 +156,38 @@ class VWARScannerGUI:
             print(f"[APP] Error updating home page: {e}")
         
         # Switch to home page to show warning
+        self.root.after(0, self.show_page, "home")
+        
+    def restore_from_view_only(self):
+        """Restore full functionality after license renewal."""
+        if not self.view_only_mode:
+            return  # Already in full mode
+        
+        self.view_only_mode = False
+        self.license_valid = True
+        print("[APP] Restoring from view-only mode - license renewed")
+        
+        # Show success message
+        try:
+            from tkinter import messagebox
+            self.root.after(0, lambda: messagebox.showinfo(
+                "License Renewed",
+                "Your license has been renewed!\n\n"
+                "All scanning features are now enabled.\n"
+                "Thank you for using VWAR Scanner."
+            ))
+        except Exception:
+            pass
+        
+        # Recreate home page without warning banner
+        try:
+            if "home" in self.pages:
+                self.pages["home"].destroy()
+            self.create_home_page()
+        except Exception as e:
+            print(f"[APP] Error updating home page: {e}")
+        
+        # Switch to home page to show restored state
         self.root.after(0, self.show_page, "home")
         
         
@@ -198,9 +236,6 @@ class VWARScannerGUI:
                   font=("Arial", 14, "bold"), 
                   bg="#FF4444", fg="white").pack(pady=15)
         
-        Button(frame, text="📋 License Terms", font=("Arial", 10),
-       command=lambda: self.show_page("license_terms")).pack(side='right')
-
         # 🔹 Update Status
         update_frame = Frame(frame, bg="#009AA5")
         update_frame.pack(side="top",fill='x')
@@ -225,8 +260,81 @@ class VWARScannerGUI:
         Label(user_info_frame, text=f"User: {self.activated_user}",
             font=("Arial", 12), bg="white", fg="black").pack(pady=2)
 
-        Label(user_info_frame, text=f"Valid Till: {self.valid_till}",
-            font=("Arial", 12), bg="white", fg="black").pack(pady=2)
+        # Dynamic Valid Till label that updates with license changes
+        self.valid_till_label = Label(user_info_frame, text=f"Valid Till: {self.valid_till}",
+            font=("Arial", 12), bg="white", fg="black")
+        self.valid_till_label.pack(pady=2)
+        
+        # Start periodic valid_till update (every 5 seconds)
+        def update_valid_till_display():
+            if not hasattr(self, 'valid_till_label') or not self.valid_till_label.winfo_exists():
+                return  # Stop if label destroyed
+            
+            try:
+                # Reload from activation file
+                SECRET_KEY = self.generate_fernet_key_from_string("VWAR@BIFIN")
+                fernet = Fernet(SECRET_KEY)
+                with open(ACTIVATION_FILE, "rb") as f:
+                    encrypted = f.read()
+                    decrypted = fernet.decrypt(encrypted)
+                    data = json.loads(decrypted.decode("utf-8"))
+                
+                new_valid_till = data.get("valid_till", "Unknown")
+                if new_valid_till != self.valid_till:
+                    self.valid_till = new_valid_till
+                    self.valid_till_label.config(text=f"Valid Till: {self.valid_till}")
+                    print(f"[UI] Updated Valid Till: {self.valid_till}")
+            except Exception as e:
+                pass  # Silent fail
+            
+            # Schedule next update
+            self.root.after(5000, update_valid_till_display)  # Every 5 seconds
+        
+        # Start the update loop
+        update_valid_till_display()
+        
+        # 🔹 License Check Timer Countdown
+        from config import LICENSE_VALIDATION_INTERVAL
+        if not hasattr(self, 'license_check_countdown'):
+            self.license_check_countdown = LICENSE_VALIDATION_INTERVAL
+        
+        def update_license_check_timer():
+            """Update countdown timer for license validation checks."""
+            if not hasattr(self, 'license_check_timer_label') or not self.license_check_timer_label.winfo_exists():
+                return  # Stop if label destroyed
+            
+            try:
+                # Decrement countdown
+                self.license_check_countdown -= 1
+                
+                # If countdown reaches 0, reset to full interval
+                if self.license_check_countdown <= 0:
+                    self.license_check_countdown = LICENSE_VALIDATION_INTERVAL
+                
+                # Format as MM:SS
+                minutes = self.license_check_countdown // 60
+                seconds = self.license_check_countdown % 60
+                timer_text = f"{minutes:02d}:{seconds:02d}"
+                
+                # Update label with color coding
+                if self.license_check_countdown <= 5:
+                    # Last 5 seconds - show in red
+                    self.license_check_timer_label.config(text=timer_text, fg="#FF0000")
+                elif self.license_check_countdown <= 10:
+                    # Last 10 seconds - show in orange
+                    self.license_check_timer_label.config(text=timer_text, fg="#FF6600")
+                else:
+                    # Normal - show in teal
+                    self.license_check_timer_label.config(text=timer_text, fg="#009AA5")
+                
+            except Exception as e:
+                print(f"[UI] License timer update error: {e}")
+            
+            # Schedule next update (every 1 second)
+            self.root.after(1000, update_license_check_timer)
+        
+        # Start the timer countdown
+        update_license_check_timer()
         
         # 🔹 Auto-Renew Dropdown
         from activation.license_utils import get_auto_renew_status, update_auto_renew_status
@@ -269,6 +377,27 @@ class VWARScannerGUI:
                                           font=("Arial", 11))
         auto_renew_dropdown.pack(side="left", padx=5)
         auto_renew_dropdown.bind("<<ComboboxSelected>>", on_auto_renew_change)
+        
+        
+        # 🔹 License Controls Frame (License Terms button + Validation Timer)
+        # Positioned just above Auto Scanning Status
+        license_controls_frame = Frame(frame, bg="#009AA5")
+        license_controls_frame.pack(side="top", fill='x', padx=10, pady=10)
+        
+        # Left side: License validation timer
+        timer_frame = Frame(license_controls_frame, bg="white", relief="ridge", borderwidth=2)
+        timer_frame.pack(side='left', padx=5)
+        
+        Label(timer_frame, text="🔄 Next License Check:", font=("Arial", 9, "bold"), 
+              bg="white", fg="#006666").pack(side="left", padx=5)
+        
+        self.license_check_timer_label = Label(timer_frame, text="00:30", font=("Arial", 10, "bold"), 
+                                                bg="white", fg="#009AA5")
+        self.license_check_timer_label.pack(side="left", padx=5)
+        
+        # Right side: License Terms button
+        Button(license_controls_frame, text="📋 License Terms", font=("Arial", 10),
+               command=lambda: self.show_page("license_terms")).pack(side='right', padx=5)
         
         
                         # 🔹 Auto Scan Status
